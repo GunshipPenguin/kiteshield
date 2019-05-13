@@ -1,0 +1,11 @@
+# CMake/Intellij
+CMakeLists.txt
+cmake-build*
+.idea
+
+# Build artifacts
+obj/
+kiteshield
+
+# Packed binaries
+*.ks

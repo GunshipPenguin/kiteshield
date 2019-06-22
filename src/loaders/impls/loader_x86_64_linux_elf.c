@@ -2,6 +2,8 @@
 #include "defs.h"
 #include <stdarg.h>
 
+#define NULL 0
+
 #define STDOUT 1
 #define STDERR 2
 
@@ -20,8 +22,21 @@
 #define PROT_EXEC 0x4
 #define PROT_NONE 0x0
 
+#define MAP_FAILED ((void *) -1)
+
+/* open syscall constants */
+#define O_RDONLY 00
+#define O_WRONLY 01
+#define O_RDWR 02
+
+/* lseek syscall constants */
+# define SEEK_SET 0
+# define SEEK_CUR 1
+# define SEEK_END 2
+
 /* typedefs found in libc headers */
 typedef unsigned long long size_t;
+typedef signed long long ssize_t;
 typedef unsigned long long off_t;
 
 size_t strnlen(const char *s, size_t maxlen) {
@@ -33,15 +48,68 @@ size_t strnlen(const char *s, size_t maxlen) {
   return len;
 }
 
-void write(int fd, const char *s, size_t count) {
+ssize_t write(int fd, const char *s, size_t count) {
+  ssize_t bytes_written;
+
   /* sys_write */
   asm("mov $1, %%rax\n"
-      "mov $1, %%rdi\n"
-      "mov %0, %%rsi\n"
-      "mov %1, %%edx\n"
-      "syscall"
-  :
-  :   "rm" (s), "rm" (count));
+      "mov %1, %%edi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%edx\n"
+      "syscall\n"
+      "mov %%rax, %0"
+  :   "=rm" (bytes_written)
+  :   "rm" (fd), "rm" (s), "rm" (count));
+
+  return bytes_written;
+}
+
+ssize_t read(int fd, void *buf, size_t count) {
+  ssize_t bytes_read;
+
+  /* sys_read */
+  asm("mov $0, %%rax\n"
+      "mov %1, %%rdi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%edx\n"
+      "syscall\n"
+      "mov %%rax, %0"
+  :   "=rm" (bytes_read)
+  :   "rm" (fd), "rm" (buf), "rm" (count));
+
+  return bytes_read;
+}
+
+off_t lseek(int fd, off_t offset, int whence) {
+  off_t ret_offset;
+
+  /* sys_lseek */
+  asm("mov $8, %%rax\n"
+      "mov %0, %%rdi\n"
+      "mov %1, %%rsi\n"
+      "mov %2, %%edx\n"
+      "syscall\n"
+      "mov %%rax, %3"
+  :   "=rm" (ret_offset)
+  :   "rm" (fd), "rm" (offset), "rm" (whence));
+
+  return ret_offset;
+}
+
+int open(const char *pathname, int flags, int mode) {
+  int fd;
+
+  /* sys_open */
+  asm("mov $2, %%rax\n"
+      "movq %1, %%rdi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%rdx\n"
+      "syscall\n"
+      "mov %%eax, %0"
+  :   "+rm" (fd)
+  :   "rm" (pathname), "rm" (flags), "rm" (mode));
+
+  return fd;
 }
 
 void itoa(unsigned long long val, int is_signed, char *buf, int bitwidth, int radix) {
@@ -95,11 +163,13 @@ void minimal_printf(int fd, const char *format, ...) {
       continue;
     }
 
-    char item_buf[32];
+    char item_buf[64];
     switch (*(fmt_ptr + 1)) {
       case 'p': itoa((unsigned long long) va_arg(vl, void *), 0, item_buf, 64, 16);
         break;
       case 'd': itoa(va_arg(vl, int), 0, item_buf, 64, 10);
+        break;
+      case 's': strncpy(item_buf, va_arg(vl, char *), sizeof(item_buf));
         break;
     }
     strncpy(msg_ptr, item_buf, sizeof(item_buf));
@@ -125,15 +195,15 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
   void *ret;
 
   /* sys_mmap */
-  asm("movq $9, %%rax\n"
-      "movq %1, %%rdi\n"
-      "movq %2, %%rsi\n"
-      "movq %3, %%rdx\n"
-      "movq %4, %%r10\n"
-      "movq %5, %%r8\n"
-      "movq %6, %%r9\n"
+  asm("mov $9, %%rax\n"
+      "mov %1, %%rdi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%edx\n"
+      "mov %4, %%r10d\n"
+      "mov %5, %%r8d\n"
+      "mov %6, %%r9\n"
       "syscall\n"
-      "movq %%rax, %0"
+      "mov %%rax, %0"
   :   "+rm" (ret)
   :   "rm" (addr), "rm" (length), "rm" (prot), "rm" (flags), "rm" (fd), "rm" (offset));
 
@@ -156,15 +226,13 @@ int mprotect(void *addr, size_t len, int prot) {
   return ret;
 }
 
-void map_load_section(void *elf_start, Elf64_Phdr phdr) {
-  minimal_printf(STDERR, "mapping section at 0x%p\n", KITESHIELD_APP_BASE + phdr.p_vaddr);
-
+void map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
   void *addr = mmap((void *) KITESHIELD_APP_BASE + phdr.p_vaddr, phdr.p_memsz, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-  if (addr < 0) {
-    minimal_printf(STDERR, "mmap failure");
-    exit(1);
+  if (addr == MAP_FAILED) {
+    minimal_printf(STDERR, "mmap failure\n");
   }
+
+  minimal_printf(STDOUT, "mapping LOAD section from packed binary at 0x%p\n", addr);
 
   /* Copy section */
   char *curr_addr = addr;
@@ -186,17 +254,74 @@ void map_load_section(void *elf_start, Elf64_Phdr phdr) {
   }
 }
 
-void map_elf(void *elf_start) {
+void map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
+  int prot = 0;
+  if (phdr.p_flags & PF_R) {
+    prot |= PROT_READ;
+  }
+  if (phdr.p_flags & PF_W) {
+    prot |= PROT_WRITE;
+  }
+  if (phdr.p_flags & PF_X) {
+    prot |= PROT_EXEC;
+  }
+
+  void *load_addr = (void *) (KITESHIELD_INTERP_BASE + (phdr.p_vaddr & PAGE_MASK));
+  Elf64_Off load_off = phdr.p_offset & PAGE_MASK;
+
+  void *addr = mmap(load_addr, phdr.p_memsz, prot, MAP_PRIVATE | MAP_FIXED, fd, load_off);
+  if (addr == MAP_FAILED) {
+    minimal_printf(STDERR, "mmap failure\n");
+    exit(1);
+  }
+
+  minimal_printf(STDOUT, "mapped LOAD section from fd at %p\n", addr);
+}
+
+void map_interp(void *path) {
+  minimal_printf(STDOUT, "mapping INTERP ELF at path %s\n", path);
+  int interp_fd = open(path, O_RDONLY, 0);
+
+  if (interp_fd < -1) {
+    minimal_printf(STDERR, "open failure\n");
+    exit(1);
+  }
+
+  Elf64_Ehdr ehdr;
+  if (read(interp_fd, &ehdr, sizeof(ehdr)) < 0) {
+    minimal_printf(STDERR, "read failure\n");
+    exit(1);
+  }
+
+  for (int i = 0; i < ehdr.e_phnum; i++) {
+    Elf64_Phdr curr_phdr;
+    if (lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr), SEEK_SET) < 0) {
+      minimal_printf(STDERR, "lseek failure\n");
+      exit(1);
+    }
+
+    if (read(interp_fd, &curr_phdr, sizeof(curr_phdr)) < 0) {
+      minimal_printf(STDERR, "read failure\n");
+      exit(1);
+    }
+
+    if (curr_phdr.p_type == PT_LOAD) {
+      minimal_printf(STDOUT, "About to map segment from fd with offset %p\n", curr_phdr.p_offset);
+      map_load_section_from_fd(interp_fd, curr_phdr);
+    }
+  }
+}
+
+void map_elf_from_mem(void *elf_start) {
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
 
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
   int i;
   for (i = 0; i < ehdr->e_phnum; i++) {
     switch (curr_phdr->p_type) {
-      case PT_LOAD: map_load_section(elf_start, *curr_phdr);
+      case PT_LOAD: map_load_section_from_mem(elf_start, *curr_phdr);
         break;
-      case PT_INTERP:
-        /* TODO: Fill in this logic */
+      case PT_INTERP: map_interp(elf_start + curr_phdr->p_offset);
         break;
     }
     curr_phdr++;
@@ -210,7 +335,7 @@ void load() {
   Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff + sizeof(Elf64_Phdr));
   void *app_start = (void *) app_phdr->p_vaddr;
 
-  map_elf(app_start);
+  map_elf_from_mem(app_start);
 
   exit(0);
 }

@@ -6,6 +6,7 @@ cmake-build*
 # Build artifacts
 obj/
 kiteshield
+stub_*.h
 
 # Packed binaries
 *.ks

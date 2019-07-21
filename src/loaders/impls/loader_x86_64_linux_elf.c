@@ -1,7 +1,10 @@
 #include <elf.h>
-#include "defs.h"
 #include <stdarg.h>
 
+#include "defs.h"
+#include "elf_auxv.h"
+
+/* General constants */
 #define NULL 0
 
 #define STDOUT 1
@@ -30,9 +33,9 @@
 #define O_RDWR 02
 
 /* lseek syscall constants */
-# define SEEK_SET 0
-# define SEEK_CUR 1
-# define SEEK_END 2
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 
 /* typedefs found in libc headers */
 typedef unsigned long long size_t;
@@ -112,31 +115,6 @@ int open(const char *pathname, int flags, int mode) {
   return fd;
 }
 
-void itoa(unsigned long long val, int is_signed, char *buf, int bitwidth, int radix) {
-  static char digits[] = "0123456789ABCDEF";
-  char *buf_ptr = buf;
-
-  /* Determine if negative */
-  if (is_signed && ((1 << (bitwidth - 1)) & val)) {
-    *(buf_ptr++) = '-';
-    val = ~(val-1);
-  }
-
-  do {
-    *(buf_ptr++) = digits[val % radix];
-  } while ((val /= radix) > 0);
-  *buf_ptr = '\0';
-
-  // Buf is now correct, but reversed
-  char *start_ptr = buf;
-  char *end_ptr = buf_ptr-1; // Avoid the '\0'
-  while (start_ptr < end_ptr) {
-    char temp = *start_ptr;
-    *(start_ptr++) = *end_ptr;
-    *(end_ptr--) = temp;
-  }
-}
-
 char *strncpy(char *dest, const char *src, size_t n) {
   size_t i;
 
@@ -149,6 +127,31 @@ char *strncpy(char *dest, const char *src, size_t n) {
   }
 
   return dest;
+}
+
+void itoa(unsigned long long val, int is_signed, char *buf, int bitwidth, int radix) {
+  char *digits = "0123456789ABCDEF";
+  char *buf_ptr = buf;
+
+  /* Determine if negative */
+  if (is_signed && ((1 << (bitwidth - 1)) & val)) {
+    *(buf_ptr++) = '-';
+    val = ~(val-1);
+  }
+
+  do {
+    *(buf_ptr++) = digits[val % radix];
+  } while ((val /= radix) > 0);
+
+  *buf_ptr = '\0';
+  // Buf is now correct, but reversed
+  char *start_ptr = buf;
+  char *end_ptr = buf_ptr-1; // Avoid the '\0'
+  while (start_ptr < end_ptr) {
+    char temp = *start_ptr;
+    *(start_ptr++) = *end_ptr;
+    *(end_ptr--) = temp;
+  }
 }
 
 void minimal_printf(int fd, const char *format, ...) {
@@ -167,7 +170,7 @@ void minimal_printf(int fd, const char *format, ...) {
     switch (*(fmt_ptr + 1)) {
       case 'p': itoa((unsigned long long) va_arg(vl, void *), 0, item_buf, 64, 16);
         break;
-      case 'd': itoa(va_arg(vl, int), 0, item_buf, 64, 10);
+      case 'd': itoa(va_arg(vl, int), 0, item_buf, 32, 10);
         break;
       case 's': strncpy(item_buf, va_arg(vl, char *), sizeof(item_buf));
         break;
@@ -328,14 +331,44 @@ void map_elf_from_mem(void *elf_start) {
   }
 }
 
-void load() {
+void replace_auxv_ent(unsigned long long *auxv_start, unsigned long long label, unsigned long long value) {
+  unsigned long long *curr_ent = auxv_start;
+  while (*curr_ent != label && *curr_ent != AT_NULL) curr_ent += 2;
+
+  if (*curr_ent == AT_NULL) {
+    minimal_printf(STDERR, "Could not find auxv entry %d\n", label);
+    exit(1);
+  }
+
+  *(++curr_ent) = value;
+  minimal_printf(STDOUT, "Replaced auxv entry %d with value %d\n", label, value);
+}
+
+void setup_auxv(void *argv_start) {
+  unsigned long long *auxv_start = argv_start;
+
+#define ADVANCE_PAST_NEXT_NULL(ptr) \
+  while (*(++ptr) != NULL) ;\
+  ptr++;
+
+  ADVANCE_PAST_NEXT_NULL(auxv_start) // argv
+  ADVANCE_PAST_NEXT_NULL(auxv_start) // envp
+
+  minimal_printf(STDOUT, "Taking %p as auxv start\n", auxv_start);
+  replace_auxv_ent(auxv_start, AT_UID, 0);
+}
+
+void load(void *entry_stacktop) {
+  // As per the SVr4 ABI
+  int argc = (int) *((unsigned long long *) entry_stacktop);
+  char **argv = ((char **) entry_stacktop) + 1;
+
   Elf64_Ehdr *stub_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
   Elf64_Off phoff = stub_ehdr->e_phoff;
 
   Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff + sizeof(Elf64_Phdr));
   void *app_start = (void *) app_phdr->p_vaddr;
-
   map_elf_from_mem(app_start);
 
-  exit(0);
+  setup_auxv(argv);
 }

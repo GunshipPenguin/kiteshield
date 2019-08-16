@@ -4,6 +4,19 @@
 #include "defs.h"
 #include "elf_auxv.h"
 
+/* Debugging macros */
+#ifdef DEBUG_OUTPUT
+#define DEBUG(fmtstr) minimal_printf(1, fmtstr "\n")
+#else
+#define DEBUG(fmtstr) ;
+#endif
+
+#ifdef DEBUG_OUTPUT
+#define DEBUG_FMT(fmtstr, ...) minimal_printf(1, fmtstr "\n", __VA_ARGS__)
+#else
+#define DEBUG_FMT(fmtstr, ...) ;
+#endif
+
 /* General constants */
 #define NULL 0
 
@@ -232,10 +245,11 @@ int mprotect(void *addr, size_t len, int prot) {
 void map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
   void *addr = mmap((void *) KITESHIELD_APP_BASE + phdr.p_vaddr, phdr.p_memsz, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (addr == MAP_FAILED) {
-    minimal_printf(STDERR, "mmap failure\n");
+    DEBUG("mmap failure");
+    exit(1);
   }
 
-  minimal_printf(STDOUT, "mapping LOAD section from packed binary at 0x%p\n", addr);
+  DEBUG_FMT("mapping LOAD section from packed binary at 0x%p", addr);
 
   /* Copy section */
   char *curr_addr = addr;
@@ -252,7 +266,7 @@ void map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
   int res = mprotect(addr, memsz, prot);
 
   if (res < 0) {
-    minimal_printf(STDERR, "mprotect error\n");
+    DEBUG("mprotect error");
     exit(1);
   }
 }
@@ -274,43 +288,43 @@ void map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
 
   void *addr = mmap(load_addr, phdr.p_memsz, prot, MAP_PRIVATE | MAP_FIXED, fd, load_off);
   if (addr == MAP_FAILED) {
-    minimal_printf(STDERR, "mmap failure\n");
+    DEBUG("mmap failure while mapping load section from fd");
     exit(1);
   }
 
-  minimal_printf(STDOUT, "mapped LOAD section from fd at %p\n", addr);
+  DEBUG_FMT("mapped LOAD section from fd at %p", addr);
 }
 
 void map_interp(void *path) {
-  minimal_printf(STDOUT, "mapping INTERP ELF at path %s\n", path);
+  DEBUG_FMT("mapping INTERP ELF at path %s", path);
   int interp_fd = open(path, O_RDONLY, 0);
 
   if (interp_fd < -1) {
-    minimal_printf(STDERR, "open failure\n");
+    DEBUG("Could not open interpreter ELF");
     exit(1);
   }
 
   Elf64_Ehdr ehdr;
   if (read(interp_fd, &ehdr, sizeof(ehdr)) < 0) {
-    minimal_printf(STDERR, "read failure\n");
+    DEBUG("read failure while mapping interpreter");
     exit(1);
   }
 
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;
     if (lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr), SEEK_SET) < 0) {
-      minimal_printf(STDERR, "lseek failure\n");
+      DEBUG("lseek failure while mapping interpreter");
       exit(1);
     }
 
     if (read(interp_fd, &curr_phdr, sizeof(curr_phdr)) < 0) {
-      minimal_printf(STDERR, "read failure\n");
+      DEBUG("read failure while mapping interpreter");
       exit(1);
     }
 
     if (curr_phdr.p_type == PT_LOAD) {
-      minimal_printf(STDOUT, "About to map segment from fd with offset %p\n", curr_phdr.p_offset);
       map_load_section_from_fd(interp_fd, curr_phdr);
+      DEBUG_FMT("Mapped interpreter segment from fd with offset %p", curr_phdr.p_offset);
     }
   }
 }
@@ -336,12 +350,12 @@ void replace_auxv_ent(unsigned long long *auxv_start, unsigned long long label, 
   while (*curr_ent != label && *curr_ent != AT_NULL) curr_ent += 2;
 
   if (*curr_ent == AT_NULL) {
-    minimal_printf(STDERR, "Could not find auxv entry %d\n", label);
+    DEBUG_FMT("Could not find auxv entry %d", label);
     exit(1);
   }
 
   *(++curr_ent) = value;
-  minimal_printf(STDOUT, "Replaced auxv entry %d with value %d\n", label, value);
+  DEBUG_FMT("Replaced auxv entry %d with value %d", label, value);
 }
 
 void setup_auxv(void *argv_start) {
@@ -354,7 +368,7 @@ void setup_auxv(void *argv_start) {
   ADVANCE_PAST_NEXT_NULL(auxv_start) // argv
   ADVANCE_PAST_NEXT_NULL(auxv_start) // envp
 
-  minimal_printf(STDOUT, "Taking %p as auxv start\n", auxv_start);
+  DEBUG_FMT("Taking %p as auxv start", auxv_start);
   replace_auxv_ent(auxv_start, AT_UID, 0);
 }
 

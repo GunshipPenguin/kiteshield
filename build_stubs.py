@@ -15,7 +15,7 @@ AS = 'as'
 AS_FLAGS = ''
 
 CC = 'cc'
-CC_FLAGS = '-nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I src/include'
+CC_FLAGS = '-DDEBUG_OUTPUT -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I src/include'
 
 LD = 'ld'
 LD_FLAGS = '-T src/loaders/x86_64_linux_elf.lds'

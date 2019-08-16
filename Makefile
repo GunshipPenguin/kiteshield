@@ -1,6 +1,6 @@
 SRC_DIR = $(shell pwd)/src
 OBJ_DIR = obj
-
+ 
 SRC_FILES = $(wildcard $(SRC_DIR)/*.c)
 OBJ_FILES = $(addprefix $(OBJ_DIR)/,$(notdir $(SRC_FILES:.c=.o)))
 

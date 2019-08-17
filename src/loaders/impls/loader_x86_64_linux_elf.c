@@ -167,6 +167,14 @@ void itoa(unsigned long long val, int is_signed, char *buf, int bitwidth, int ra
   }
 }
 
+/**
+ * Minimal version of printf offering the following format specifiers
+ *
+ * %p - Unsigned 64 bit hexadecimal integer (x64 pointer)
+ * %l - Unsigned 64 bit decimal integer
+ * %d - Signed 32 bit decimal integer
+ * %s - Null terminated ASCII string
+ */
 void minimal_printf(int fd, const char *format, ...) {
   va_list vl;
   va_start(vl, format);
@@ -183,7 +191,9 @@ void minimal_printf(int fd, const char *format, ...) {
     switch (*(fmt_ptr + 1)) {
       case 'p': itoa((unsigned long long) va_arg(vl, void *), 0, item_buf, 64, 16);
         break;
-      case 'd': itoa(va_arg(vl, int), 0, item_buf, 32, 10);
+      case 'l': itoa((unsigned long long) va_arg(vl, unsigned long long), 0, item_buf, 64, 10);
+        break;
+      case 'd': itoa(va_arg(vl, int), 1, item_buf, 32, 10);
         break;
       case 's': strncpy(item_buf, va_arg(vl, char *), sizeof(item_buf));
         break;

@@ -252,8 +252,11 @@ int mprotect(void *addr, size_t len, int prot) {
   return ret;
 }
 
-void map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
-  void *addr = mmap((void *) KITESHIELD_APP_BASE + phdr.p_vaddr, phdr.p_memsz, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
+  void *addr = mmap((void *) KITESHIELD_APP_BASE + phdr.p_vaddr, 
+                    phdr.p_memsz, 
+                    PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
   if (addr == MAP_FAILED) {
     DEBUG("mmap failure");
     exit(1);
@@ -261,9 +264,10 @@ void map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
 
   DEBUG_FMT("mapping LOAD section from packed binary at 0x%p", addr);
 
-  /* Copy section */
+  /* When we map a section of the packed binary, the contents are copied */
   char *curr_addr = addr;
-  for (Elf64_Off f_off = (Elf64_Addr) phdr.p_offset; f_off < phdr.p_offset + phdr.p_filesz; f_off++) {
+  for (Elf64_Off f_off = (Elf64_Addr) phdr.p_offset;
+       f_off < phdr.p_offset + phdr.p_filesz; f_off++) {
     *(curr_addr++) = *((char *) elf_start + f_off);
   }
 
@@ -279,9 +283,11 @@ void map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
     DEBUG("mprotect error");
     exit(1);
   }
+
+  return addr;
 }
 
-void map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
+void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
   int prot = 0;
   if (phdr.p_flags & PF_R) {
     prot |= PROT_READ;
@@ -303,9 +309,10 @@ void map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
   }
 
   DEBUG_FMT("mapped LOAD section from fd at %p", addr);
+  return load_addr;
 }
 
-void map_interp(void *path) {
+void *map_interp(void *path) {
   DEBUG_FMT("mapping INTERP ELF at path %s", path);
   int interp_fd = open(path, O_RDONLY, 0);
 
@@ -320,6 +327,8 @@ void map_interp(void *path) {
     exit(1);
   }
 
+  void *base_addr;
+  int base_addr_set = 0;
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;
     if (lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr), SEEK_SET) < 0) {
@@ -333,29 +342,55 @@ void map_interp(void *path) {
     }
 
     if (curr_phdr.p_type == PT_LOAD) {
-      map_load_section_from_fd(interp_fd, curr_phdr);
-      DEBUG_FMT("Mapped interpreter segment from fd with offset %p", curr_phdr.p_offset);
+      void *addr = map_load_section_from_fd(interp_fd, curr_phdr);
+      if (!base_addr_set){
+        base_addr = addr;
+        base_addr_set = 1;
+      }
+      DEBUG_FMT("Mapped interpreter segment from fd with offset %p", 
+                curr_phdr.p_offset);
     }
   }
+  return base_addr; 
 }
 
-void map_elf_from_mem(void *elf_start) {
+void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
+                      void **interp_base) {
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
+  int first_load_segment = 1;
 
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
   int i;
   for (i = 0; i < ehdr->e_phnum; i++) {
-    switch (curr_phdr->p_type) {
-      case PT_LOAD: map_load_section_from_mem(elf_start, *curr_phdr);
-        break;
-      case PT_INTERP: map_interp(elf_start + curr_phdr->p_offset);
-        break;
+    if (curr_phdr->p_type == PT_LOAD) {  
+        void *addr = map_load_section_from_mem(elf_start, *curr_phdr);
+
+        /* If this is the first load segment, assume that it starts at an
+         * an offset of 0 in the original ELF, and contains the program header
+         * table. This isn't totally standards compliant, but is an assumption
+         * the Linux kernel makes. See linux/fs/binfmt_elf.c. */
+        if (first_load_segment) {
+          *phdr_addr = addr + ehdr->e_phoff;
+          DEBUG_FMT("Packed ELF load segment at 0x%p", phdr_addr);
+          first_load_segment = 0;
+        }
+
+        /* If this section contains the entry point, set *entry */
+        if ((curr_phdr->p_vaddr <= ehdr->e_entry) &&
+            (curr_phdr->p_vaddr + curr_phdr->p_memsz >= ehdr->e_entry)) {
+          *entry = addr + ehdr->e_entry;
+          DEBUG_FMT("Packed ELF entry address is 0x%p", *entry);
+        }
+    } else if (curr_phdr->p_type == PT_INTERP) {
+        *interp_base = map_interp(elf_start + curr_phdr->p_offset);
+        DEBUG_FMT("Interpreter base address is %p", *interp_base);
     }
     curr_phdr++;
   }
 }
 
-void replace_auxv_ent(unsigned long long *auxv_start, unsigned long long label, unsigned long long value) {
+void replace_auxv_ent(unsigned long long *auxv_start, 
+                      unsigned long long label, unsigned long long value) {
   unsigned long long *curr_ent = auxv_start;
   while (*curr_ent != label && *curr_ent != AT_NULL) curr_ent += 2;
 
@@ -365,34 +400,42 @@ void replace_auxv_ent(unsigned long long *auxv_start, unsigned long long label, 
   }
 
   *(++curr_ent) = value;
-  DEBUG_FMT("Replaced auxv entry %d with value %d", label, value);
+  DEBUG_FMT("Replaced auxv entry %d with value %l", label, value);
 }
 
-void setup_auxv(void *argv_start) {
+void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
+                void *interp_base) {
   unsigned long long *auxv_start = argv_start;
 
 #define ADVANCE_PAST_NEXT_NULL(ptr) \
   while (*(++ptr) != NULL) ;\
   ptr++;
 
-  ADVANCE_PAST_NEXT_NULL(auxv_start) // argv
-  ADVANCE_PAST_NEXT_NULL(auxv_start) // envp
+  ADVANCE_PAST_NEXT_NULL(auxv_start) /* argv */
+  ADVANCE_PAST_NEXT_NULL(auxv_start) /* envp */
 
   DEBUG_FMT("Taking %p as auxv start", auxv_start);
   replace_auxv_ent(auxv_start, AT_UID, 0);
+  replace_auxv_ent(auxv_start, AT_ENTRY, (unsigned long long) entry);
+  replace_auxv_ent(auxv_start, AT_PHDR, (unsigned long long) phdr_addr);
+  replace_auxv_ent(auxv_start, AT_BASE, (unsigned long long) interp_base);
 }
 
 void load(void *entry_stacktop) {
-  // As per the SVr4 ABI
+  /* As per the SVr4 ABI */
   int argc = (int) *((unsigned long long *) entry_stacktop);
   char **argv = ((char **) entry_stacktop) + 1;
 
   Elf64_Ehdr *stub_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
   Elf64_Off phoff = stub_ehdr->e_phoff;
 
-  Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff + sizeof(Elf64_Phdr));
-  void *app_start = (void *) app_phdr->p_vaddr;
-  map_elf_from_mem(app_start);
+  Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff + 
+                                         sizeof(Elf64_Phdr));
 
-  setup_auxv(argv);
+  void *app_start = (void *) app_phdr->p_vaddr;
+  void *entry;
+  void *phdr_addr;
+  void *interp_base;
+  map_elf_from_mem(app_start, &entry, &phdr_addr, &interp_base);
+  setup_auxv(argv, entry, phdr_addr, interp_base);
 }

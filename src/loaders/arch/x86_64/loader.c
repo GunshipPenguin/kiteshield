@@ -62,6 +62,19 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
     prot |= PROT_EXEC;
   }
 
+  /* mmap requires that the addr and offset fields are multiples of the page
+   * size. Since that may not be the case for the p_vaddr and p_offset fields
+   * in an ELF binary, we have to do some grungy work to ensure the passed in
+   * addr/offset are multipls of the page size.
+   *
+   * To calculate the load address, we start at the interpreter base address
+   * (which is a multiple of the page size itself), and add p_vaddr rounded
+   * down to the nearest page size multiple. We round down the offset parameter
+   * to the nearest page size multiple in the same way. Since both the offset
+   * and virtual address are guaranteed to be congruent modulo the page size
+   * (as per the ELF standard), this will result in them both being rounded
+   * down by the same amount, and the produced mapping will be correct.
+   */
   void *load_addr = (void *) (INTERP_LOAD_ADDR + (phdr.p_vaddr & PAGE_MASK));
   Elf64_Off load_off = phdr.p_offset & PAGE_MASK;
 

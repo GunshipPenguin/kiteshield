@@ -3,10 +3,13 @@ CMakeLists.txt
 cmake-build*
 .idea
 
+# Vim
+*~
+
 # Build artifacts
 obj/
-kiteshield
-stub_*.h
+src/packer/kiteshield
+src/loaders/loader_headers
 
 # Packed binaries
 *.ks

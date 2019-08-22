@@ -6,8 +6,8 @@ SECTIONS
 {
   . = 0x0000000000000000;
   .text : {
-    *entry_x86_64_linux_elf.o(.text)
-    *loader_x86_64_linux_elf.o(.text)
+    *entry.o(.text)
+    *loader.o(.text)
   }
   .data : {
     *(.data)

@@ -1,29 +1,16 @@
-SRC_DIR = $(shell pwd)/src
-OBJ_DIR = obj
- 
-SRC_FILES = $(wildcard $(SRC_DIR)/*.c)
-OBJ_FILES = $(addprefix $(OBJ_DIR)/,$(notdir $(SRC_FILES:.c=.o)))
+all: loaders packer
 
-CC_FLAGS ?= -std=c99 -Wall -I $(SRC_DIR)/include -g
+debug: loaders_debug packer 
 
-BIN_NAME = kiteshield
+packer:
+	$(MAKE) -C src/packer
 
-all: stubs $(OBJ_DIR) $(BIN_NAME)
+loaders:
+	$(MAKE) -C src/loaders
 
-stubs:
-	python3 build_stubs.py
-
-$(BIN_NAME): $(OBJ_FILES)
-	$(CC) -o $@ $^
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CC_FLAGS) -c -o $@ $<
-
-$(OBJ_DIR):
-	mkdir $(OBJ_DIR)
+loaders_debug:
+	$(MAKE) debug -C src/loaders
 
 clean:
-	rm -rf $(OBJ_DIR)
-	rm -f $(BIN_NAME)
-
-.PHONY: stubs clean
+	$(MAKE) clean -C src/loaders
+	$(MAKE) clean -C src/packer

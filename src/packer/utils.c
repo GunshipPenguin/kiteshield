@@ -1,6 +1,6 @@
 #include <elf.h>
 #include <string.h>
-#include "include/utils.h"
+#include "packer/include/utils.h"
 
 void init_ehdr(Elf64_Ehdr *ehdr, Elf64_Addr entry) {
   /* Ident array */

@@ -3,10 +3,16 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include "utils.h"
-#include "defs.h"
 
-#include "loaders/stub_x86_64_linux_elf.h"
+#include "common/include/defs.h"
+#include "loaders/loader_headers/loader_x86_64.h"
+#include "packer/include/utils.h"
+
+/* Virtual address at which the twice encrypted ELF is to be
+ * initially loaded by the kernel (this is the p_vaddr field).
+ * The loader will then copy it to another address, peel off
+ * the first layer of encryption, and run it. */
+#define APP_VADDR 0xA00000ULL
 
 int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
   FILE *file;
@@ -36,14 +42,14 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
   init_phdr(&stub_phdr,
       0,
       KITESHIELD_STUB_BASE,
-      sizeof(stub_x86_64_linux_elf),
+      sizeof(loader_x86_64),
       PF_R | PF_W | PF_X,
       0x200000);
   CK(fwrite(&stub_phdr, sizeof(stub_phdr), 1, output_file), 0)
 
   /* Program header for packed application */
-  Elf64_Off app_offset = ftell(output_file) + sizeof(Elf64_Phdr) + sizeof(stub_x86_64_linux_elf);
-  Elf64_Addr app_vaddr = KITESHIELD_APP_BASE + app_offset; /* Keep vaddr aligned with offset */
+  Elf64_Off app_offset = ftell(output_file) + sizeof(Elf64_Phdr) + sizeof(loader_x86_64);
+  Elf64_Addr app_vaddr = APP_VADDR + app_offset; /* Keep vaddr aligned with offset */
   Elf64_Phdr app_phdr;
   init_phdr(&app_phdr,
       app_offset,
@@ -54,7 +60,7 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
   CK(fwrite(&app_phdr, sizeof(app_phdr), 1, output_file), 0)
 
   /* Stub loader contents */
-  CK(fwrite(stub_x86_64_linux_elf, sizeof(stub_x86_64_linux_elf), 1, output_file), 0)
+  CK(fwrite(loader_x86_64, sizeof(loader_x86_64), 1, output_file), 0)
 
   /* Packed application contents */
   CK(fwrite(input_elf, input_elf_size, 1, output_file), 0)

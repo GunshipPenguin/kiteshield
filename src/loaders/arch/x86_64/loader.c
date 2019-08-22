@@ -19,11 +19,7 @@ void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
   void *addr = mmap((void *) ENCRYPTED_APP_LOAD_ADDR + phdr.p_vaddr, 
                     phdr.p_memsz, 
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-  if (addr == MAP_FAILED) {
-    DEBUG("mmap failure");
-    exit(1);
-  }
+  DIE_IF(addr == MAP_FAILED, "mmap failure");
 
   DEBUG_FMT("mapping LOAD section from packed binary at 0x%p", addr);
 
@@ -41,11 +37,7 @@ void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
 
   size_t memsz = (phdr.p_memsz & PAGE_MASK) + PAGE_SIZE;
   int res = mprotect(addr, memsz, prot);
-
-  if (res < 0) {
-    DEBUG("mprotect error");
-    exit(1);
-  }
+  DIE_IF(res < 0, "mprotect error");
 
   return addr;
 }
@@ -79,10 +71,7 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
   Elf64_Off load_off = phdr.p_offset & PAGE_MASK;
 
   void *addr = mmap(load_addr, phdr.p_memsz, prot, MAP_PRIVATE | MAP_FIXED, fd, load_off);
-  if (addr == MAP_FAILED) {
-    DEBUG("mmap failure while mapping load section from fd");
-    exit(1);
-  }
+  DIE_IF(addr == MAP_FAILED, "mmap failure while mapping load section from fd");
 
   DEBUG_FMT("mapped LOAD section from fd at %p", addr);
   return load_addr;
@@ -107,15 +96,12 @@ void *map_interp(void *path) {
   int base_addr_set = 0;
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;
-    if (lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr), SEEK_SET) < 0) {
-      DEBUG("lseek failure while mapping interpreter");
-      exit(1);
-    }
 
-    if (read(interp_fd, &curr_phdr, sizeof(curr_phdr)) < 0) {
-      DEBUG("read failure while mapping interpreter");
-      exit(1);
-    }
+    off_t lseek_res = lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr), SEEK_SET);
+    DIE_IF(lseek_res < 0, "lseek failure while mapping interpreter");
+
+    size_t read_res = read(interp_fd, &curr_phdr, sizeof(curr_phdr));
+    DIE_IF(read_res < 0, "read failure while mapping interpreter");
 
     if (curr_phdr.p_type == PT_LOAD) {
       void *addr = map_load_section_from_fd(interp_fd, curr_phdr);
@@ -169,11 +155,7 @@ void replace_auxv_ent(unsigned long long *auxv_start,
                       unsigned long long label, unsigned long long value) {
   unsigned long long *curr_ent = auxv_start;
   while (*curr_ent != label && *curr_ent != AT_NULL) curr_ent += 2;
-
-  if (*curr_ent == AT_NULL) {
-    DEBUG_FMT("Could not find auxv entry %d", label);
-    exit(1);
-  }
+  DIE_IF_FMT(*curr_ent == AT_NULL, "Could not find auxv entry %d", label);
 
   *(++curr_ent) = value;
   DEBUG_FMT("Replaced auxv entry %d with value %l", label, value);

@@ -1,6 +1,6 @@
 all: loaders packer
 
-debug: loaders_debug packer 
+debug: loaders_debug packer
 
 packer:
 	$(MAKE) -C src/packer

@@ -16,8 +16,8 @@
 #define PAGE_MASK (~0 << PAGE_SHIFT)
 
 void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
-  void *addr = mmap((void *) ENCRYPTED_APP_LOAD_ADDR + phdr.p_vaddr, 
-                    phdr.p_memsz, 
+  void *addr = mmap((void *) ENCRYPTED_APP_LOAD_ADDR + phdr.p_vaddr,
+                    phdr.p_memsz,
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   DIE_IF(addr == MAP_FAILED, "mmap failure");
 
@@ -109,11 +109,11 @@ void *map_interp(void *path) {
         base_addr = addr;
         base_addr_set = 1;
       }
-      DEBUG_FMT("Mapped interpreter segment from fd with offset %p", 
+      DEBUG_FMT("Mapped interpreter segment from fd with offset %p",
                 curr_phdr.p_offset);
     }
   }
-  return base_addr; 
+  return base_addr;
 }
 
 void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
@@ -124,7 +124,7 @@ void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
   int i;
   for (i = 0; i < ehdr->e_phnum; i++) {
-    if (curr_phdr->p_type == PT_LOAD) {  
+    if (curr_phdr->p_type == PT_LOAD) {
         void *addr = map_load_section_from_mem(elf_start, *curr_phdr);
 
         /* If this is the first load segment, assume that it starts at an
@@ -151,7 +151,7 @@ void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
   }
 }
 
-void replace_auxv_ent(unsigned long long *auxv_start, 
+void replace_auxv_ent(unsigned long long *auxv_start,
                       unsigned long long label, unsigned long long value) {
   unsigned long long *curr_ent = auxv_start;
   while (*curr_ent != label && *curr_ent != AT_NULL) curr_ent += 2;
@@ -187,7 +187,7 @@ void load(void *entry_stacktop) {
   Elf64_Ehdr *stub_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
   Elf64_Off phoff = stub_ehdr->e_phoff;
 
-  Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff + 
+  Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff +
                                          sizeof(Elf64_Phdr));
 
   void *app_start = (void *) app_phdr->p_vaddr;

@@ -11,7 +11,7 @@ def bin_to_header(bin_file, array_name):
         ['0x' + binascii.hexlify(byte).decode('ascii')
          for byte in iter(lambda: bytes(bin_file.read(1)), b'')]
 
-    sys.stdout.write('#ifndef KITESHIELD_%s_H\n' % array_name.upper())  
+    sys.stdout.write('#ifndef KITESHIELD_%s_H\n' % array_name.upper())
     sys.stdout.write('#define KITESHIELD_%s_H\n\n' % array_name.upper())
     sys.stdout.write('char %s[%d] = {\n' % (array_name, len(byte_strs)))
 
@@ -19,7 +19,7 @@ def bin_to_header(bin_file, array_name):
         line_list = byte_strs[BYTES_PER_LINE*line_num:BYTES_PER_LINE*line_num+BYTES_PER_LINE]
         line_num_comment = '/* %s */' % hex(line_num * BYTES_PER_LINE)
         sys.stdout.writelines([
-            line_num_comment, '  ', ', '.join(line_list), ',\n' 
+            line_num_comment, '  ', ', '.join(line_list), ',\n'
         ])
 
     sys.stdout.write('};\n\n')

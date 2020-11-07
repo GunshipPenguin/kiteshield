@@ -190,6 +190,14 @@ void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
   replace_auxv_ent(auxv_start, AT_BASE, (unsigned long long) interp_base);
 }
 
+void pass_control(void *entry) {
+  DEBUG_FMT("Handing off control to binary at address %p", entry);
+  asm("int3");
+  asm("jmp %0"
+  :
+  :   "rm" (entry));
+}
+
 void load(void *entry_stacktop) {
   /* As per the SVr4 ABI */
   int argc = (int) *((unsigned long long *) entry_stacktop);
@@ -207,4 +215,6 @@ void load(void *entry_stacktop) {
   void *interp_base;
   map_elf_from_mem(app_start, &entry, &phdr_addr, &interp_base);
   setup_auxv(argv, entry, phdr_addr, interp_base);
+
+  pass_control(entry);
 }

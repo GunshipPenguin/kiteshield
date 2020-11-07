@@ -77,7 +77,7 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
   return load_addr;
 }
 
-void *map_interp(void *path) {
+void map_interp(void *path, void **entry, void **interp_base) {
   DEBUG_FMT("mapping INTERP ELF at path %s", path);
   int interp_fd = open(path, O_RDONLY, 0);
 
@@ -92,7 +92,6 @@ void *map_interp(void *path) {
     exit(1);
   }
 
-  void *base_addr;
   int base_addr_set = 0;
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;
@@ -103,17 +102,25 @@ void *map_interp(void *path) {
     size_t read_res = read(interp_fd, &curr_phdr, sizeof(curr_phdr));
     DIE_IF(read_res < 0, "read failure while mapping interpreter");
 
-    if (curr_phdr.p_type == PT_LOAD) {
-      void *addr = map_load_section_from_fd(interp_fd, curr_phdr);
-      if (!base_addr_set){
-        base_addr = addr;
-        base_addr_set = 1;
-      }
-      DEBUG_FMT("Mapped interpreter segment from fd with offset %p",
-                curr_phdr.p_offset);
+    /* We shouldn't be dealing with any non PT_LOAD segments here */
+    if (curr_phdr.p_type != PT_LOAD)
+      continue;
+
+    void *addr = map_load_section_from_fd(interp_fd, curr_phdr);
+    if ((curr_phdr.p_vaddr <= ehdr.e_entry) &&
+        (curr_phdr.p_vaddr + curr_phdr.p_memsz >= ehdr.e_entry)) {
+          *entry = (addr - curr_phdr.p_vaddr) + ehdr.e_entry;
+          DEBUG_FMT("Interpreter entry address is 0x%p", *entry);
     }
+
+    if (!base_addr_set){
+      DEBUG_FMT("Interpreter base address is 0x%p", addr);
+      *interp_base = addr;
+      base_addr_set = 1;
+    }
+    DEBUG_FMT("Mapped interpreter segment from fd with offset %p",
+              curr_phdr.p_offset);
   }
-  return base_addr;
 }
 
 void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
@@ -122,6 +129,7 @@ void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
   int first_load_segment = 1;
 
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
+  Elf64_Phdr *interp_hdr = NULL;
   int i;
   for (i = 0; i < ehdr->e_phnum; i++) {
     if (curr_phdr->p_type == PT_LOAD) {
@@ -144,10 +152,13 @@ void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
           DEBUG_FMT("Packed ELF entry address is 0x%p", *entry);
         }
     } else if (curr_phdr->p_type == PT_INTERP) {
-        *interp_base = map_interp(elf_start + curr_phdr->p_offset);
-        DEBUG_FMT("Interpreter base address is %p", *interp_base);
+      interp_hdr = curr_phdr;
     }
     curr_phdr++;
+  }
+
+  if (interp_hdr) {
+    map_interp(elf_start + interp_hdr->p_offset, entry, interp_base);
   }
 }
 

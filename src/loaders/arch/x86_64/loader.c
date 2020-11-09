@@ -15,6 +15,10 @@
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 #define PAGE_MASK (~0 << PAGE_SHIFT)
 
+#define PAGE_ROUND_DOWN(ptr) ((ptr) & PAGE_MASK)
+/* ptr - 1 accounts for the case when we're exactly on a page aligned addr */
+#define PAGE_ROUND_UP(ptr) ((((ptr) - 1) & PAGE_MASK) + PAGE_SIZE)
+
 void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
   void *addr = mmap((void *) ENCRYPTED_APP_LOAD_ADDR + phdr.p_vaddr,
                     phdr.p_memsz,
@@ -67,11 +71,23 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
    * (as per the ELF standard), this will result in them both being rounded
    * down by the same amount, and the produced mapping will be correct.
    */
-  void *load_addr = (void *) (INTERP_LOAD_ADDR + (phdr.p_vaddr & PAGE_MASK));
+  void *load_addr = (void *) (INTERP_LOAD_ADDR + PAGE_ROUND_DOWN(phdr.p_vaddr));
   Elf64_Off load_off = phdr.p_offset & PAGE_MASK;
 
-  void *addr = mmap(load_addr, phdr.p_memsz, prot, MAP_PRIVATE | MAP_FIXED, fd, load_off);
-  DIE_IF(addr == MAP_FAILED, "mmap failure while mapping load section from fd");
+  void *addr = mmap(load_addr, phdr.p_filesz, prot, MAP_PRIVATE | MAP_FIXED,
+                    fd, load_off);
+  DIE_IF(addr == MAP_FAILED,
+         "mmap failure while mapping load section from fd");
+
+  /* If p_memsz > p_filesz, the remaining space must be filled with zeros, map
+   * extra anon pages if this is the case. */
+  if (phdr.p_memsz > phdr.p_filesz) {
+    void *extra_space = mmap(addr + PAGE_ROUND_UP(phdr.p_filesz),
+                             phdr.p_memsz - phdr.p_filesz, prot,
+                             MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    DIE_IF(extra_space == MAP_FAILED,
+           "mmap failure while mapping extra space for static vars");
+  }
 
   DEBUG_FMT("mapped LOAD section from fd at %p", addr);
   return load_addr;
@@ -123,8 +139,8 @@ void map_interp(void *path, void **entry, void **interp_base) {
   }
 }
 
-void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
-                      void **interp_base) {
+void map_elf_from_mem(void *elf_start, void **entry, void **interp_entry,
+                      void **phdr_addr, void **interp_base) {
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
   int first_load_segment = 1;
 
@@ -158,7 +174,7 @@ void map_elf_from_mem(void *elf_start, void **entry, void **phdr_addr,
   }
 
   if (interp_hdr) {
-    map_interp(elf_start + interp_hdr->p_offset, entry, interp_base);
+    map_interp(elf_start + interp_hdr->p_offset, interp_entry, interp_base);
   }
 }
 
@@ -169,15 +185,15 @@ void replace_auxv_ent(unsigned long long *auxv_start,
   DIE_IF_FMT(*curr_ent == AT_NULL, "Could not find auxv entry %d", label);
 
   *(++curr_ent) = value;
-  DEBUG_FMT("Replaced auxv entry %d with value %l", label, value);
+  DEBUG_FMT("Replaced auxv entry %d with value %l (0x%p)", label, value, value);
 }
 
 void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
-                void *interp_base) {
+                void *interp_base, unsigned long long phnum) {
   unsigned long long *auxv_start = argv_start;
 
 #define ADVANCE_PAST_NEXT_NULL(ptr) \
-  while (*(++ptr) != NULL) ;\
+  while (*(++ptr) != NULL) ;        \
   ptr++;
 
   ADVANCE_PAST_NEXT_NULL(auxv_start) /* argv */
@@ -188,17 +204,11 @@ void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
   replace_auxv_ent(auxv_start, AT_ENTRY, (unsigned long long) entry);
   replace_auxv_ent(auxv_start, AT_PHDR, (unsigned long long) phdr_addr);
   replace_auxv_ent(auxv_start, AT_BASE, (unsigned long long) interp_base);
+  replace_auxv_ent(auxv_start, AT_PHNUM, phnum);
 }
 
-void pass_control(void *entry) {
-  DEBUG_FMT("Handing off control to binary at address %p", entry);
-  asm("int3");
-  asm("jmp %0"
-  :
-  :   "rm" (entry));
-}
-
-void load(void *entry_stacktop) {
+/* Load the packed binary, returns the address to hand control to when done */
+void *load(void *entry_stacktop) {
   /* As per the SVr4 ABI */
   int argc = (int) *((unsigned long long *) entry_stacktop);
   char **argv = ((char **) entry_stacktop) + 1;
@@ -208,13 +218,18 @@ void load(void *entry_stacktop) {
 
   Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff +
                                          sizeof(Elf64_Phdr));
+  Elf64_Ehdr *app_ehdr = (Elf64_Ehdr *) (app_phdr->p_vaddr);
 
   void *app_start = (void *) app_phdr->p_vaddr;
+  void *interp_entry;
   void *entry;
   void *phdr_addr;
   void *interp_base;
-  map_elf_from_mem(app_start, &entry, &phdr_addr, &interp_base);
-  setup_auxv(argv, entry, phdr_addr, interp_base);
+  map_elf_from_mem(app_start, &entry, &interp_entry, &phdr_addr, &interp_base);
+  setup_auxv(argv, entry, phdr_addr, interp_base, app_ehdr->e_phnum);
 
-  pass_control(entry);
+  DEBUG("Finished mapping binary into memory");
+  DEBUG_FMT("Control will be passed to %p", interp_entry);
+
+  return interp_entry;
 }

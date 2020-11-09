@@ -7,9 +7,5 @@ _start:
     mov %rsp, %rdi # entry_stacktop
     call load
 
-    jmp exit_success
+    jmp %rax
 
-exit_success:
-    mov $60, %rax
-    mov $0, %rdi
-    syscall

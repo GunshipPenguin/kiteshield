@@ -26,7 +26,8 @@ void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
    * an fd (ie. we can just not touch the remaining space and it will be full
    * of zeros by default).
    */
-  void *addr = mmap(ENCRYPTED_APP_LOAD_ADDR + PAGE_ALIGN_DOWN(phdr.p_vaddr),
+  void *addr = mmap((void *) (ENCRYPTED_APP_LOAD_ADDR +
+                              PAGE_ALIGN_DOWN(phdr.p_vaddr)),
                     phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   DIE_IF(addr == MAP_FAILED, "mmap failure");
@@ -74,7 +75,8 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
    * (as per the ELF standard), this will result in them both being rounded
    * down by the same amount, and the produced mapping will be correct.
    */
-  void *addr = mmap(INTERP_LOAD_ADDR + PAGE_ALIGN_DOWN(phdr.p_vaddr),
+  void *addr = mmap((void *) (INTERP_LOAD_ADDR +
+                              PAGE_ALIGN_DOWN(phdr.p_vaddr)),
                     phdr.p_filesz + PAGE_OFFSET(phdr.p_vaddr),
                     prot, MAP_PRIVATE | MAP_FIXED,
                     fd,
@@ -110,6 +112,7 @@ void map_interp(void *path, void **entry, void **interp_base) {
     DEBUG("read failure while mapping interpreter");
     exit(1);
   }
+  *entry = ((void *) INTERP_LOAD_ADDR + ehdr.e_entry);
 
   int base_addr_set = 0;
   for (int i = 0; i < ehdr.e_phnum; i++) {
@@ -126,11 +129,6 @@ void map_interp(void *path, void **entry, void **interp_base) {
       continue;
 
     void *addr = map_load_section_from_fd(interp_fd, curr_phdr);
-    if ((curr_phdr.p_vaddr <= ehdr.e_entry) &&
-        (curr_phdr.p_vaddr + curr_phdr.p_memsz >= ehdr.e_entry)) {
-          *entry = (addr - curr_phdr.p_vaddr) + ehdr.e_entry;
-          DEBUG_FMT("Interpreter entry address is 0x%p", *entry);
-    }
 
     if (!base_addr_set){
       DEBUG_FMT("Interpreter base address is 0x%p", addr);
@@ -142,8 +140,8 @@ void map_interp(void *path, void **entry, void **interp_base) {
   }
 }
 
-void map_elf_from_mem(void *elf_start, void **entry, void **interp_entry,
-                      void **phdr_addr, void **interp_base) {
+void map_elf_from_mem(void *elf_start, void **interp_entry, void **phdr_addr,
+                      void **interp_base) {
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
   int first_load_segment = 1;
 
@@ -162,13 +160,6 @@ void map_elf_from_mem(void *elf_start, void **entry, void **interp_entry,
           *phdr_addr = addr + ehdr->e_phoff;
           DEBUG_FMT("Packed ELF load segment at 0x%p", phdr_addr);
           first_load_segment = 0;
-        }
-
-        /* If this section contains the entry point, set *entry */
-        if ((curr_phdr->p_vaddr <= ehdr->e_entry) &&
-            (curr_phdr->p_vaddr + curr_phdr->p_memsz >= ehdr->e_entry)) {
-          *entry = addr + ehdr->e_entry;
-          DEBUG_FMT("Packed ELF entry address is 0x%p", *entry);
         }
     } else if (curr_phdr->p_type == PT_INTERP) {
       interp_hdr = curr_phdr;
@@ -223,13 +214,14 @@ void *load(void *entry_stacktop) {
                                          sizeof(Elf64_Phdr));
   Elf64_Ehdr *app_ehdr = (Elf64_Ehdr *) (app_phdr->p_vaddr);
 
-  void *app_start = (void *) app_phdr->p_vaddr;
+  Elf64_Ehdr *app_start = (Elf64_Ehdr *) app_phdr->p_vaddr;
   void *interp_entry;
-  void *entry;
   void *phdr_addr;
   void *interp_base;
-  map_elf_from_mem(app_start, &entry, &interp_entry, &phdr_addr, &interp_base);
-  setup_auxv(argv, entry, phdr_addr, interp_base, app_ehdr->e_phnum);
+  DEBUG_FMT("%p", stub_ehdr->e_entry);
+  map_elf_from_mem(app_ehdr, &interp_entry, &phdr_addr, &interp_base);
+  setup_auxv(argv, (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_entry),
+             phdr_addr, interp_base, app_ehdr->e_phnum);
 
   DEBUG("Finished mapping binary into memory");
   DEBUG_FMT("Control will be passed to %p", interp_entry);

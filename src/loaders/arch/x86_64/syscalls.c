@@ -49,7 +49,7 @@ off_t lseek(int fd, off_t offset, int whence) {
 }
 
 int open(const char *pathname, int flags, int mode) {
-  int fd;
+  int fd = -1;
 
   /* sys_open */
   asm("mov $2, %%rax\n"
@@ -74,7 +74,7 @@ void exit(int status) {
 }
 
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
-  void *ret;
+  void *ret = (void *) -1;
 
   /* sys_mmap */
   asm("mov $9, %%rax\n"
@@ -87,13 +87,14 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
       "syscall\n"
       "mov %%rax, %0"
   :   "+rm" (ret)
-  :   "rm" (addr), "rm" (length), "rm" (prot), "rm" (flags), "rm" (fd), "rm" (offset));
+  :   "rm" (addr), "rm" (length), "rm" (prot), "rm" (flags), "rm" (fd),
+      "rm" (offset));
 
   return ret;
 }
 
 int mprotect(void *addr, size_t len, int prot) {
-  int ret;
+  int ret = -1;
 
   /* sys_mmap */
   asm("movq $10, %%rax\n"

@@ -204,7 +204,7 @@ void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
 /* Load the packed binary, returns the address to hand control to when done */
 void *load(void *entry_stacktop) {
   /* As per the SVr4 ABI */
-  int argc = (int) *((unsigned long long *) entry_stacktop);
+  /* int argc = (int) *((unsigned long long *) entry_stacktop); */
   char **argv = ((char **) entry_stacktop) + 1;
 
   Elf64_Ehdr *stub_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
@@ -214,11 +214,9 @@ void *load(void *entry_stacktop) {
                                          sizeof(Elf64_Phdr));
   Elf64_Ehdr *app_ehdr = (Elf64_Ehdr *) (app_phdr->p_vaddr);
 
-  Elf64_Ehdr *app_start = (Elf64_Ehdr *) app_phdr->p_vaddr;
   void *interp_entry;
   void *phdr_addr;
   void *interp_base;
-  DEBUG_FMT("%p", stub_ehdr->e_entry);
   map_elf_from_mem(app_ehdr, &interp_entry, &phdr_addr, &interp_base);
   setup_auxv(argv, (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_entry),
              phdr_addr, interp_base, app_ehdr->e_phnum);

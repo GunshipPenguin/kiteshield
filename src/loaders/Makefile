@@ -1,4 +1,4 @@
-CFLAGS = -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
+CFLAGS = -Wall -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
 ARCH_DIR = arch
 HEADER_OUTPUT_DIR = loader_headers
 

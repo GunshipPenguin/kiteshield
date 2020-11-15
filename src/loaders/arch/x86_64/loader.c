@@ -31,7 +31,7 @@ void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
                     phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   DIE_IF(addr == MAP_FAILED, "mmap failure");
-  DEBUG_FMT("mapping LOAD section from packed binary at 0x%p", addr);
+  DEBUG_FMT("mapping LOAD section from packed binary at %p", addr);
 
   /* Copy data from the packed binary */
   char *curr_addr = addr;
@@ -103,7 +103,7 @@ void map_interp(void *path, void **entry, void **interp_base) {
   int interp_fd = open(path, O_RDONLY, 0);
 
   if (interp_fd < -1) {
-    DEBUG("Could not open interpreter ELF");
+    DEBUG("could not open interpreter ELF");
     exit(1);
   }
 
@@ -131,11 +131,11 @@ void map_interp(void *path, void **entry, void **interp_base) {
     void *addr = map_load_section_from_fd(interp_fd, curr_phdr);
 
     if (!base_addr_set){
-      DEBUG_FMT("Interpreter base address is 0x%p", addr);
+      DEBUG_FMT("interpreter base address is %p", addr);
       *interp_base = addr;
       base_addr_set = 1;
     }
-    DEBUG_FMT("Mapped interpreter segment from fd with offset %p",
+    DEBUG_FMT("mapped interpreter segment from fd with offset %p",
               curr_phdr.p_offset);
   }
 }
@@ -158,7 +158,7 @@ void map_elf_from_mem(void *elf_start, void **interp_entry, void **phdr_addr,
          * the Linux kernel makes. See linux/fs/binfmt_elf.c. */
         if (first_load_segment) {
           *phdr_addr = addr + ehdr->e_phoff;
-          DEBUG_FMT("Packed ELF load segment at 0x%p", phdr_addr);
+          DEBUG_FMT("packed ELF load segment is at %p", phdr_addr);
           first_load_segment = 0;
         }
     } else if (curr_phdr->p_type == PT_INTERP) {
@@ -176,10 +176,10 @@ void replace_auxv_ent(unsigned long long *auxv_start,
                       unsigned long long label, unsigned long long value) {
   unsigned long long *curr_ent = auxv_start;
   while (*curr_ent != label && *curr_ent != AT_NULL) curr_ent += 2;
-  DIE_IF_FMT(*curr_ent == AT_NULL, "Could not find auxv entry %d", label);
+  DIE_IF_FMT(*curr_ent == AT_NULL, "could not find auxv entry %d", label);
 
   *(++curr_ent) = value;
-  DEBUG_FMT("Replaced auxv entry %d with value %l (0x%p)", label, value, value);
+  DEBUG_FMT("replaced auxv entry %d with value %l (0x%p)", label, value, value);
 }
 
 void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
@@ -193,7 +193,7 @@ void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
   ADVANCE_PAST_NEXT_NULL(auxv_start) /* argv */
   ADVANCE_PAST_NEXT_NULL(auxv_start) /* envp */
 
-  DEBUG_FMT("Taking %p as auxv start", auxv_start);
+  DEBUG_FMT("taking %p as auxv start", auxv_start);
   replace_auxv_ent(auxv_start, AT_UID, 0);
   replace_auxv_ent(auxv_start, AT_ENTRY, (unsigned long long) entry);
   replace_auxv_ent(auxv_start, AT_PHDR, (unsigned long long) phdr_addr);
@@ -221,8 +221,8 @@ void *load(void *entry_stacktop) {
   setup_auxv(argv, (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_entry),
              phdr_addr, interp_base, app_ehdr->e_phnum);
 
-  DEBUG("Finished mapping binary into memory");
-  DEBUG_FMT("Control will be passed to %p", interp_entry);
+  DEBUG("finished mapping binary into memory");
+  DEBUG_FMT("control will be passed to ld.so at %p", interp_entry);
 
   return interp_entry;
 }

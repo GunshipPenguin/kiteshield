@@ -18,7 +18,7 @@ static char *strncpy(char *dest, const char *src, size_t n) {
 }
 
 void itoa(unsigned long long val, int is_signed, char *buf, int bitwidth, int radix) {
-  char *digits = "0123456789ABCDEF";
+  char *digits = "0123456789abcdef";
   char *buf_ptr = buf;
 
   /* Determine if negative */

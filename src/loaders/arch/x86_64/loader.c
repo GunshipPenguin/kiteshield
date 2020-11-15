@@ -140,27 +140,15 @@ void map_interp(void *path, void **entry, void **interp_base) {
   }
 }
 
-void map_elf_from_mem(void *elf_start, void **interp_entry, void **phdr_addr,
+void map_elf_from_mem(void *elf_start, void **interp_entry,
                       void **interp_base) {
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
-  int first_load_segment = 1;
 
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
   Elf64_Phdr *interp_hdr = NULL;
-  int i;
-  for (i = 0; i < ehdr->e_phnum; i++) {
+  for (int i = 0; i < ehdr->e_phnum; i++) {
     if (curr_phdr->p_type == PT_LOAD) {
-        void *addr = map_load_section_from_mem(elf_start, *curr_phdr);
-
-        /* If this is the first load segment, assume that it starts at an
-         * an offset of 0 in the original ELF, and contains the program header
-         * table. This isn't totally standards compliant, but is an assumption
-         * the Linux kernel makes. See linux/fs/binfmt_elf.c. */
-        if (first_load_segment) {
-          *phdr_addr = addr + ehdr->e_phoff;
-          DEBUG_FMT("packed ELF load segment is at %p", phdr_addr);
-          first_load_segment = 0;
-        }
+        map_load_section_from_mem(elf_start, *curr_phdr);
     } else if (curr_phdr->p_type == PT_INTERP) {
       interp_hdr = curr_phdr;
     }
@@ -215,11 +203,12 @@ void *load(void *entry_stacktop) {
   Elf64_Ehdr *app_ehdr = (Elf64_Ehdr *) (app_phdr->p_vaddr);
 
   void *interp_entry;
-  void *phdr_addr;
   void *interp_base;
-  map_elf_from_mem(app_ehdr, &interp_entry, &phdr_addr, &interp_base);
-  setup_auxv(argv, (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_entry),
-             phdr_addr, interp_base, app_ehdr->e_phnum);
+  map_elf_from_mem(app_ehdr, &interp_entry, &interp_base);
+  setup_auxv(argv,
+             (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_entry),
+             (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_phoff),
+             interp_base, app_ehdr->e_phnum);
 
   DEBUG("finished mapping binary into memory");
   DEBUG_FMT("control will be passed to ld.so at %p", interp_entry);

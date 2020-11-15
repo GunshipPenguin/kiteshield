@@ -15,34 +15,37 @@
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 #define PAGE_MASK (~0 << PAGE_SHIFT)
 
-#define PAGE_ROUND_DOWN(ptr) ((ptr) & PAGE_MASK)
-/* ptr - 1 accounts for the case when we're exactly on a page aligned addr */
-#define PAGE_ROUND_UP(ptr) ((((ptr) - 1) & PAGE_MASK) + PAGE_SIZE)
+#define PAGE_ALIGN_DOWN(ptr) ((ptr) & PAGE_MASK)
+#define PAGE_ALIGN_UP(ptr) ((((ptr) - 1) & PAGE_MASK) + PAGE_SIZE)
+#define PAGE_OFFSET(ptr) (ptr & ~(PAGE_MASK))
 
 void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
-  void *addr = mmap((void *) ENCRYPTED_APP_LOAD_ADDR + phdr.p_vaddr,
-                    phdr.p_memsz,
+  /* Same rounding logic as in map_load_section_from_fd, see comment below.
+   * Note that we don't need a separate mmap here for bss if memsz > filesz
+   * as we map an anonymous region and copy into it rather than mapping from
+   * an fd (ie. we can just not touch the remaining space and it will be full
+   * of zeros by default).
+   */
+  void *addr = mmap(ENCRYPTED_APP_LOAD_ADDR + PAGE_ALIGN_DOWN(phdr.p_vaddr),
+                    phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   DIE_IF(addr == MAP_FAILED, "mmap failure");
-
   DEBUG_FMT("mapping LOAD section from packed binary at 0x%p", addr);
 
-  /* When we map a section of the packed binary, the contents are copied */
+  /* Copy data from the packed binary */
   char *curr_addr = addr;
-  for (Elf64_Off f_off = (Elf64_Addr) phdr.p_offset;
-       f_off < phdr.p_offset + phdr.p_filesz; f_off++) {
-    *(curr_addr++) = *((char *) elf_start + f_off);
+  for (Elf64_Off f_off = PAGE_ALIGN_DOWN(phdr.p_offset);
+       f_off < phdr.p_offset + phdr.p_filesz;
+       f_off++) {
+    (*curr_addr++) = *((char *) elf_start + f_off);
   }
 
-  /* Set correct permissions (change from -W-) */
+  /* Set correct permissions (change from -w-) */
   int prot = (phdr.p_flags & PF_R ? PROT_READ : 0)  |
              (phdr.p_flags & PF_W ? PROT_WRITE : 0) |
              (phdr.p_flags & PF_X ? PROT_EXEC : 0);
-
-  size_t memsz = (phdr.p_memsz & PAGE_MASK) + PAGE_SIZE;
-  int res = mprotect(addr, memsz, prot);
-  DIE_IF(res < 0, "mprotect error");
-
+  DIE_IF(mprotect(addr, phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr), prot) < 0,
+         "mprotect error");
   return addr;
 }
 
@@ -60,8 +63,8 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
 
   /* mmap requires that the addr and offset fields are multiples of the page
    * size. Since that may not be the case for the p_vaddr and p_offset fields
-   * in an ELF binary, we have to do some grungy work to ensure the passed in
-   * addr/offset are multipls of the page size.
+   * in an ELF binary, we have to do some math to ensure the passed in
+   * address/offset are multiples of the page size.
    *
    * To calculate the load address, we start at the interpreter base address
    * (which is a multiple of the page size itself), and add p_vaddr rounded
@@ -71,18 +74,18 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
    * (as per the ELF standard), this will result in them both being rounded
    * down by the same amount, and the produced mapping will be correct.
    */
-  void *load_addr = (void *) (INTERP_LOAD_ADDR + PAGE_ROUND_DOWN(phdr.p_vaddr));
-  Elf64_Off load_off = phdr.p_offset & PAGE_MASK;
-
-  void *addr = mmap(load_addr, phdr.p_filesz, prot, MAP_PRIVATE | MAP_FIXED,
-                    fd, load_off);
+  void *addr = mmap(INTERP_LOAD_ADDR + PAGE_ALIGN_DOWN(phdr.p_vaddr),
+                    phdr.p_filesz + PAGE_OFFSET(phdr.p_vaddr),
+                    prot, MAP_PRIVATE | MAP_FIXED,
+                    fd,
+                    PAGE_ALIGN_DOWN(phdr.p_offset));
   DIE_IF(addr == MAP_FAILED,
          "mmap failure while mapping load section from fd");
 
-  /* If p_memsz > p_filesz, the remaining space must be filled with zeros, map
-   * extra anon pages if this is the case. */
+  /* If p_memsz > p_filesz, the remaining space must be filled with zeros
+   * (Usually the .bss section), map extra anon pages if this is the case. */
   if (phdr.p_memsz > phdr.p_filesz) {
-    void *extra_space = mmap(addr + PAGE_ROUND_UP(phdr.p_filesz),
+    void *extra_space = mmap(addr + PAGE_ALIGN_UP(phdr.p_filesz),
                              phdr.p_memsz - phdr.p_filesz, prot,
                              MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
     DIE_IF(extra_space == MAP_FAILED,
@@ -90,7 +93,7 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
   }
 
   DEBUG_FMT("mapped LOAD section from fd at %p", addr);
-  return load_addr;
+  return addr;
 }
 
 void map_interp(void *path, void **entry, void **interp_base) {

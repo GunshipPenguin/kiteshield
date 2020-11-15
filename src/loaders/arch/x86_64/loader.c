@@ -101,24 +101,19 @@ void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
 void map_interp(void *path, void **entry, void **interp_base) {
   DEBUG_FMT("mapping INTERP ELF at path %s", path);
   int interp_fd = open(path, O_RDONLY, 0);
-
-  if (interp_fd < -1) {
-    DEBUG("could not open interpreter ELF");
-    exit(1);
-  }
+  DIE_IF(interp_fd == -1, "could not open interpreter binary");
 
   Elf64_Ehdr ehdr;
-  if (read(interp_fd, &ehdr, sizeof(ehdr)) < 0) {
-    DEBUG("read failure while mapping interpreter");
-    exit(1);
-  }
+  DIE_IF(read(interp_fd, &ehdr, sizeof(ehdr)) < 0,
+         "read failure while reading interpreter binary header");
   *entry = ((void *) INTERP_LOAD_ADDR + ehdr.e_entry);
 
   int base_addr_set = 0;
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;
 
-    off_t lseek_res = lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr), SEEK_SET);
+    off_t lseek_res = lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr),
+                            SEEK_SET);
     DIE_IF(lseek_res < 0, "lseek failure while mapping interpreter");
 
     size_t read_res = read(interp_fd, &curr_phdr, sizeof(curr_phdr));

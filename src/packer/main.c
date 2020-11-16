@@ -4,9 +4,10 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
+#include "packer/include/utils.h"
+#include "common/include/rc4.h"
 #include "common/include/defs.h"
 #include "loaders/loader_headers/loader_x86_64.h"
-#include "packer/include/utils.h"
 
 /* Virtual address at which the twice encrypted ELF is to be
  * initially loaded by the kernel (this is the p_vaddr field).

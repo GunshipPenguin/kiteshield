@@ -1,6 +1,8 @@
 #include <elf.h>
 
 #include "common/include/defs.h"
+#include "common/include/rc4.h"
+
 #include "loaders/arch/x86_64/include/syscall_defines.h"
 #include "loaders/platform_independent/include/arch_typedefs.h"
 #include "loaders/platform_independent/include/debug.h"

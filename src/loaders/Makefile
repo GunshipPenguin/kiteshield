@@ -33,13 +33,16 @@ clean:
 # -------------------------------------------------
 #  x86-64
 # -------------------------------------------------
-X86_64_SRCS = $(wildcard arch/x86_64/*.[c,S])
+X86_64_SRCS = $(wildcard arch/x86_64/*.[c,S] ../common/*.c)
 X86_64_OBJS = $(addprefix obj/x86_64/, $(addsuffix .o, $(basename $(notdir $(X86_64_SRCS:.c=.o)))))
 
 x86_64_output_dirs:
 	mkdir -p obj/x86_64
 
 obj/x86_64/%.o: arch/x86_64/%.c
+	$(CC) $(CFLAGS) $< -o $@
+
+obj/x86_64/%.o: ../common/%.c
 	$(CC) $(CFLAGS) $< -o $@
 
 obj/x86_64/%.o: arch/x86_64/%.S

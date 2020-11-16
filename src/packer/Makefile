@@ -1,6 +1,6 @@
 CFLAGS = -Wall -I ..
 
-SRCS = $(wildcard *.c)
+SRCS = $(wildcard *.c ../common/*.c)
 OBJS = $(addprefix ./obj/, $(notdir $(SRCS:.c=.o)))
 BIN_NAME = kiteshield
 
@@ -11,6 +11,9 @@ output_dirs:
 	mkdir -p obj
 
 obj/%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+obj/%.o: ../common/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:

@@ -164,7 +164,7 @@ void replace_auxv_ent(unsigned long long *auxv_start,
   DIE_IF_FMT(*curr_ent == AT_NULL, "could not find auxv entry %d", label);
 
   *(++curr_ent) = value;
-  DEBUG_FMT("replaced auxv entry %d with value %l (0x%p)", label, value, value);
+  DEBUG_FMT("replaced auxv entry %d with value %d (0x%p)", label, value, value);
 }
 
 void setup_auxv(void *argv_start, void *entry, void *phdr_addr,

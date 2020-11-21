@@ -54,15 +54,12 @@ void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
 
 void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
   int prot = 0;
-  if (phdr.p_flags & PF_R) {
+  if (phdr.p_flags & PF_R)
     prot |= PROT_READ;
-  }
-  if (phdr.p_flags & PF_W) {
+  if (phdr.p_flags & PF_W)
     prot |= PROT_WRITE;
-  }
-  if (phdr.p_flags & PF_X) {
+  if (phdr.p_flags & PF_X)
     prot |= PROT_EXEC;
-  }
 
   /* mmap requires that the addr and offset fields are multiples of the page
    * size. Since that may not be the case for the p_vaddr and p_offset fields
@@ -144,17 +141,16 @@ void map_elf_from_mem(void *elf_start, void **interp_entry,
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
   Elf64_Phdr *interp_hdr = NULL;
   for (int i = 0; i < ehdr->e_phnum; i++) {
-    if (curr_phdr->p_type == PT_LOAD) {
-        map_load_section_from_mem(elf_start, *curr_phdr);
-    } else if (curr_phdr->p_type == PT_INTERP) {
+    if (curr_phdr->p_type == PT_LOAD)
+      map_load_section_from_mem(elf_start, *curr_phdr);
+    else if (curr_phdr->p_type == PT_INTERP)
       interp_hdr = curr_phdr;
-    }
+
     curr_phdr++;
   }
 
-  if (interp_hdr) {
+  if (interp_hdr)
     map_interp(elf_start + interp_hdr->p_offset, interp_entry, interp_base);
-  }
 }
 
 void replace_auxv_ent(unsigned long long *auxv_start,

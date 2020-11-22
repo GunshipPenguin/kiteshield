@@ -43,9 +43,7 @@
 #else
 #define DIE_FMT(msg, ...) \
   do { \
-    if (cond) { \
-      exit(0); \
-    } \
+    exit(0); \
   } while (0)
 #endif
 

@@ -17,7 +17,7 @@ def bin_to_header(bin_file, array_name):
 
     for line_num in range(math.ceil(len(byte_strs) / BYTES_PER_LINE)):
         line_list = byte_strs[BYTES_PER_LINE*line_num:BYTES_PER_LINE*line_num+BYTES_PER_LINE]
-        line_num_comment = '/* %s */' % hex(line_num * BYTES_PER_LINE)
+        line_num_comment = '/* %s */' % '{0:#06x}'.format(line_num * BYTES_PER_LINE)
         sys.stdout.writelines([
             line_num_comment, '  ', ', '.join(line_list), ',\n'
         ])

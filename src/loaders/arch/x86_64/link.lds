@@ -5,6 +5,9 @@ ENTRY(_start)
 SECTIONS
 {
   . = 0x0000000000000000;
+  .key_info : {
+    *loader.o(.key_info)
+  }
   .text : {
     *entry.o(.text)
     *loader.o(.text)
@@ -13,3 +16,4 @@ SECTIONS
     *(.data)
   }
 }
+

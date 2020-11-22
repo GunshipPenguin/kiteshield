@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <time.h>
 #include <elf.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -32,8 +33,14 @@ int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
 }
 
 int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size) {
-  /* ELF header */
-  Elf64_Addr entry_vaddr = KITESHIELD_STUB_BASE + sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr) * 2;
+  /* The entry address is located right after the struct key_info (used for
+   * passing decryption key and other info to loader), which is the first
+   * sizeof(struct key_info) bytes of the loader code (guaranteed by the linker
+   * script) */
+  Elf64_Addr entry_vaddr = KITESHIELD_STUB_BASE +
+                           sizeof(Elf64_Ehdr) +
+                           (sizeof(Elf64_Phdr) * 2) +
+                           sizeof(struct key_info);
   Elf64_Ehdr ehdr;
   init_ehdr(&ehdr, entry_vaddr);
   CK(fwrite(&ehdr, sizeof(ehdr), 1, output_file), 0)
@@ -56,7 +63,7 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
       app_offset,
       app_vaddr,
       input_elf_size,
-      PF_R,
+      PF_R | PF_W,
       0x200000);
   CK(fwrite(&app_phdr, sizeof(app_phdr), 1, output_file), 0)
 
@@ -69,6 +76,33 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
   return 0;
 }
 
+void encrypt_binary(void *packed_bin_start, void *loader_start,
+                    size_t packed_bin_size) {
+  /* Generate key */
+  struct key_info key_info;
+  srand(time(NULL));
+  for (int i = 0; i < sizeof(key_info.key); i++) {
+    /* super duper cryptographically secure (TM) */
+    key_info.key[i] = rand() & 0xFF;
+  }
+
+  /* Encrypt the actual binary */
+  struct rc4_state rc4;
+  rc4_init(&rc4, key_info.key, sizeof(key_info.key));
+
+  /* skip the first sizeof(struct key_info) bytes as that has the key itself */
+  unsigned char *curr = ((unsigned char *) packed_bin_start) +
+                        sizeof(struct key_info);
+  for (size_t i = 0; i < packed_bin_size; i++) {
+    unsigned char enc_byte = rc4_get_byte(&rc4);
+    *curr = *curr ^ enc_byte;
+    curr++;
+  }
+
+  /* Copy over key_info struct so the loader can decrypt */
+  *((struct key_info *) loader_start) = key_info;
+}
+
 int main(int argc, char *argv[]) {
   if (argc != 3) {
     printf("Usage: kiteshield <input> <output>\n");
@@ -78,6 +112,8 @@ int main(int argc, char *argv[]) {
   void *elf_buf;
   size_t elf_buf_size;
   CK(read_input_elf(argv[1], &elf_buf, &elf_buf_size), -1)
+
+  encrypt_binary(elf_buf, loader_x86_64, elf_buf_size);
 
   FILE *output_elf;
   CK(output_elf = fopen(argv[2], "w"), NULL)

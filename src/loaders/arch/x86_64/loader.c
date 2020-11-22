@@ -21,6 +21,8 @@
 #define PAGE_ALIGN_UP(ptr) ((((ptr) - 1) & PAGE_MASK) + PAGE_SIZE)
 #define PAGE_OFFSET(ptr) (ptr & ~(PAGE_MASK))
 
+struct key_info key_info __attribute__((section(".key_info")));
+
 void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
   /* Same rounding logic as in map_load_section_from_fd, see comment below.
    * Note that we don't need a separate mmap here for bss if memsz > filesz
@@ -160,7 +162,8 @@ void replace_auxv_ent(unsigned long long *auxv_start,
   DIE_IF_FMT(*curr_ent == AT_NULL, "could not find auxv entry %d", label);
 
   *(++curr_ent) = value;
-  DEBUG_FMT("replaced auxv entry %d with value %d (0x%p)", label, value, value);
+  DEBUG_FMT("replaced auxv entry %llu with value %llu (0x%p)", label, value,
+            value);
 }
 
 void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
@@ -182,26 +185,57 @@ void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
   replace_auxv_ent(auxv_start, AT_PHNUM, phnum);
 }
 
+void decrypt_packed_bin(void *packed_bin_start, size_t packed_bin_size) {
+  struct rc4_state rc4;
+  rc4_init(&rc4, key_info.key, sizeof(key_info.key));
+
+#ifdef DEBUG_OUTPUT
+  minimal_printf(1, KITESHIELD_PREFIX "RC4 decrypting binary with key ");
+  for (int i = 0; i < KEY_SIZE; i++) {
+    minimal_printf(1, "%hhx ", key_info.key[i]);
+  }
+  minimal_printf(1, "\n");
+#endif
+
+  unsigned char *curr = packed_bin_start + sizeof(key_info);
+  for (int i = 0; i < packed_bin_size; i++) {
+    unsigned char enc_byte = rc4_get_byte(&rc4);
+    *curr = *curr ^ enc_byte;
+    curr++;
+  }
+
+  DEBUG_FMT("decrypted %u bytes", packed_bin_size);
+}
+
 /* Load the packed binary, returns the address to hand control to when done */
 void *load(void *entry_stacktop) {
   /* As per the SVr4 ABI */
   /* int argc = (int) *((unsigned long long *) entry_stacktop); */
   char **argv = ((char **) entry_stacktop) + 1;
 
-  Elf64_Ehdr *stub_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
-  Elf64_Off phoff = stub_ehdr->e_phoff;
+  /* "our" EHDR (ie. the one in the on-disk binary that was run) */
+  Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
 
-  Elf64_Phdr *app_phdr = (Elf64_Phdr *) (KITESHIELD_STUB_BASE + phoff +
-                                         sizeof(Elf64_Phdr));
-  Elf64_Ehdr *app_ehdr = (Elf64_Ehdr *) (app_phdr->p_vaddr);
+  /* The PHDR in our binary corresponding to the encrypted app */
+  Elf64_Phdr *packed_bin_phdr = (Elf64_Phdr *)
+                                (KITESHIELD_STUB_BASE + us_ehdr->e_phoff +
+                                 sizeof(Elf64_Phdr));
+
+  /* The EHDR of the actual application to be run (encrypted until
+   * decrypt_packed_bin is called)
+   */
+  Elf64_Ehdr *packed_bin_ehdr = (Elf64_Ehdr *) (packed_bin_phdr->p_vaddr);
+
+  decrypt_packed_bin((void *) packed_bin_phdr->p_vaddr,
+                     packed_bin_phdr->p_memsz);
 
   void *interp_entry;
   void *interp_base;
-  map_elf_from_mem(app_ehdr, &interp_entry, &interp_base);
+  map_elf_from_mem(packed_bin_ehdr, &interp_entry, &interp_base);
   setup_auxv(argv,
-             (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_entry),
-             (void *) (ENCRYPTED_APP_LOAD_ADDR + app_ehdr->e_phoff),
-             interp_base, app_ehdr->e_phnum);
+             (void *) (ENCRYPTED_APP_LOAD_ADDR + packed_bin_ehdr->e_entry),
+             (void *) (ENCRYPTED_APP_LOAD_ADDR + packed_bin_ehdr->e_phoff),
+             interp_base, packed_bin_ehdr->e_phnum);
 
   DEBUG("finished mapping binary into memory");
   DEBUG_FMT("control will be passed to ld.so at %p", interp_entry);

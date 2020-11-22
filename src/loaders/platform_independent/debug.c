@@ -78,6 +78,7 @@ void minimal_printf(int fd, const char *format, ...) {
   va_start(vl, format);
 
   char msg_buf[1024];
+  __builtin_memset(msg_buf, 0, sizeof(msg_buf));
   char *msg_ptr = msg_buf;
 
   for (const char *fmt_ptr=format; *fmt_ptr != '\0'; fmt_ptr++) {
@@ -89,6 +90,7 @@ void minimal_printf(int fd, const char *format, ...) {
     int length;
     unsigned long long item;
     char item_buf[128];
+    __builtin_memset(item_buf, 0, sizeof(item_buf));
 
     fmt_ptr++;
     switch (*(fmt_ptr)) {

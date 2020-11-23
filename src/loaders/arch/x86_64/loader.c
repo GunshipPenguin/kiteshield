@@ -2,6 +2,7 @@
 
 #include "common/include/defs.h"
 #include "common/include/rc4.h"
+#include "common/include/key_utils.h"
 
 #include "loaders/arch/x86_64/include/syscall_defines.h"
 #include "loaders/platform_independent/include/arch_typedefs.h"
@@ -185,22 +186,25 @@ void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
   replace_auxv_ent(auxv_start, AT_PHNUM, phnum);
 }
 
-void decrypt_packed_bin(void *packed_bin_start, size_t packed_bin_size) {
+void decrypt_packed_bin(void *packed_bin_start, size_t packed_bin_size,
+                        void *loader_start, size_t loader_size) {
+  struct key_info actual_key;
+  obf_deobf_key(&key_info, &actual_key, loader_start, loader_size);
+
   struct rc4_state rc4;
-  rc4_init(&rc4, key_info.key, sizeof(key_info.key));
+  rc4_init(&rc4, actual_key.key, sizeof(actual_key.key));
 
 #ifdef DEBUG_OUTPUT
   minimal_printf(1, KITESHIELD_PREFIX "RC4 decrypting binary with key ");
   for (int i = 0; i < KEY_SIZE; i++) {
-    minimal_printf(1, "%hhx ", key_info.key[i]);
+    minimal_printf(1, "%hhx ", actual_key.key[i]);
   }
   minimal_printf(1, "\n");
 #endif
 
-  unsigned char *curr = packed_bin_start + sizeof(key_info);
+  unsigned char *curr = packed_bin_start;
   for (int i = 0; i < packed_bin_size; i++) {
-    unsigned char enc_byte = rc4_get_byte(&rc4);
-    *curr = *curr ^ enc_byte;
+    *curr = *curr ^ rc4_get_byte(&rc4);
     curr++;
   }
 
@@ -216,10 +220,12 @@ void *load(void *entry_stacktop) {
   /* "our" EHDR (ie. the one in the on-disk binary that was run) */
   Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
 
+  /* The PHDR in our binary corresponding to the loader (ie. this code) */
+  Elf64_Phdr *loader_phdr = (Elf64_Phdr *)
+                            (KITESHIELD_STUB_BASE + us_ehdr->e_phoff);
+
   /* The PHDR in our binary corresponding to the encrypted app */
-  Elf64_Phdr *packed_bin_phdr = (Elf64_Phdr *)
-                                (KITESHIELD_STUB_BASE + us_ehdr->e_phoff +
-                                 sizeof(Elf64_Phdr));
+  Elf64_Phdr *packed_bin_phdr = loader_phdr + 1;
 
   /* The EHDR of the actual application to be run (encrypted until
    * decrypt_packed_bin is called)
@@ -227,7 +233,9 @@ void *load(void *entry_stacktop) {
   Elf64_Ehdr *packed_bin_ehdr = (Elf64_Ehdr *) (packed_bin_phdr->p_vaddr);
 
   decrypt_packed_bin((void *) packed_bin_phdr->p_vaddr,
-                     packed_bin_phdr->p_memsz);
+                     packed_bin_phdr->p_memsz,
+                     (void *) loader_phdr->p_vaddr + sizeof(Elf64_Ehdr) + (2*sizeof(Elf64_Phdr)),
+                     loader_phdr->p_memsz);
 
   void *interp_entry;
   void *interp_base;

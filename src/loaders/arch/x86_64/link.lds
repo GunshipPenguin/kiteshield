@@ -11,6 +11,7 @@ SECTIONS
   .text : {
     *entry.o(.text)
     *loader.o(.text)
+    *key_utils.o(.text)
   }
   .data : {
     *(.data)

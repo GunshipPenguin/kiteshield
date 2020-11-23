@@ -87,6 +87,7 @@ void encrypt_binary(void *packed_bin_start, void *loader_start,
     key_info.key[i] = rand() & 0xFF;
   }
 
+  printf("RC4 encrypting binary with key ");
   for (int i = 0; i < sizeof(key_info.key); i++) {
     printf("%hhx ", key_info.key[i]);
   }

@@ -1,3 +1,5 @@
+#ifdef DEBUG_OUTPUT
+
 #include "loaders/platform_independent/include/arch_typedefs.h"
 #include "loaders/platform_independent/include/debug.h"
 
@@ -158,4 +160,5 @@ copy:
   va_end(vl);
 }
 
+#endif /* DEBUG_OUTPUT */
 

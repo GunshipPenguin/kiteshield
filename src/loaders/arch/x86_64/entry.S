@@ -2,31 +2,33 @@
 .global _start
 
 _start:
-    # Load function has the following signature
-    # void load(void *entry_stacktop)
-    mov %rsp, %rdi # entry_stacktop
-    call load
+  # Load function has the following signature
+  # void load(void *entry_stacktop)
+  mov %rsp, %rdi # entry_stacktop
+  call load
 
-    # Before we jump to program entry, zero out all registers in case
-    # the mapping code modified them. ld.so or any other binary
-    # shouldn't assume that these are zero, but this should make
-    # things more deterministic.
-    mov $0, %rcx
-    mov $0, %rbx
-    mov $0, %rdx
-    mov $0, %rdx
-    mov $0, %rsi
-    mov $0, %rdi
-    mov $0, %rbp
+  # Return value of load is entry of ld.so to jump to, keep it safe
+  mov %rax, %rbx
 
-    mov $0, %r8
-    mov $0, %r9
-    mov $0, %r10
-    mov $0, %r11
-    mov $0, %r12
-    mov $0, %r13
-    mov $0, %r14
-    mov $0, %r15
+  # Start the runtime in a new thread
+  mov $57, %rax # fork
+  syscall
 
-    jmp %rax
+  cmp $-1, %rax
+  je fork_failed
 
+  cmp $0, %rax
+  je child
+
+  # In original thread, pass control to ld.so
+  jmp *%rbx
+
+fork_failed:
+  mov $0, %rdi
+  jmp exit
+
+child:
+  call runtime_start
+
+  mov $60, %rax
+  syscall

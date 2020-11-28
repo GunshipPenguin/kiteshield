@@ -1,0 +1,3 @@
+[submodule "src/packer/bddisasm"]
+	path = src/packer/bddisasm
+	url = https://github.com/bitdefender/bddisasm

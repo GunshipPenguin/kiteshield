@@ -2,8 +2,12 @@
 #include <time.h>
 #include <elf.h>
 #include <fcntl.h>
+#include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <stdbool.h>
+
+#include "bddisasm.h"
 
 #include "packer/include/utils.h"
 #include "common/include/rc4.h"
@@ -16,6 +20,15 @@
  * The loader will then copy it to another address, peel off
  * the first layer of encryption, and run it. */
 #define APP_VADDR 0xA00000ULL
+
+int nd_vsnprintf_s(char *buffer, size_t sizeOfBuffer, size_t count,
+                   const char *format, va_list argptr) {
+  return vsnprintf(buffer, sizeOfBuffer, format, argptr);
+}
+
+void* nd_memset(void *s, int c, size_t n)  {
+  return memset(s, c, n);
+}
 
 int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
   FILE *file;

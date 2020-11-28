@@ -5,6 +5,9 @@ SRCS = $(wildcard *.c ../common/*.c)
 OBJS = $(addprefix ./obj/, $(notdir $(SRCS:.c=.o)))
 BIN_NAME = kiteshield
 
+debug: CFLAGS += -g
+debug: all
+
 all: output_dirs $(OBJS)
 	$(CC) $(OBJS) -o $(BIN_NAME) $(LDFLAGS)
 

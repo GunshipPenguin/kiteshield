@@ -99,9 +99,37 @@ void generate_key(struct key_info *key_info) {
   }
 }
 
+int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
+  uint8_t *code = elf_get_sym(elf_start, func_sym);
 
-int encrypt_functions(void *elf_start, size_t elf_size,
-                      struct key_info *key_info) {
+  uint8_t *code_ptr = code;
+  while (code_ptr < code + func_sym->st_size) {
+    INSTRUX ix;
+    NDSTATUS status = NdDecode(&ix, code_ptr, ND_CODE_64, ND_DATA_64);
+
+    if (!ND_SUCCESS(status)) {
+      fprintf(stderr, "Instruction decoding failed\n");
+      return -1;
+    }
+
+    /* Ret opcodes */
+    if (ix.PrimaryOpCode == 0xC3 || ix.PrimaryOpCode == 0xCB ||
+        ix.PrimaryOpCode == 0xC2 || ix.PrimaryOpCode == 0xCA) {
+      printf("Instrumenting ret instruction at %hhn with int3", code_ptr);
+      /* 0xCC = int3 (one byte instruction) */
+      *code_ptr = (uint8_t) 0xCC;
+    }
+
+    code_ptr += ix.Length;
+  }
+
+  /* Instrument entry point */
+  code[0] = 0xCC;
+  return 0;
+}
+
+int encrypt_funcs(void *elf_start, size_t elf_size,
+                  struct key_info *key_info) {
   const Elf64_Shdr *strtab = elf_get_sec_by_name(elf_start, ".strtab");
   if (strtab == NULL) {
     fprintf(stderr, "Could not find string table, not encrypting functions");
@@ -109,8 +137,13 @@ int encrypt_functions(void *elf_start, size_t elf_size,
   }
 
   ELF_FOR_EACH_SYMBOL(elf_start, sym) {
-    if (ELF64_ST_TYPE(sym->st_info) == STT_FUNC)
-      printf("Found function symbol %s\n", elf_get_sym_name(elf_start, sym, strtab));
+    if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
+      continue;
+
+    printf("Found function symbol %s\n",
+            elf_get_sym_name(elf_start, sym, strtab));
+
+    instrument_func(elf_start, sym);
   }
 
   return 0;
@@ -156,7 +189,7 @@ int main(int argc, char *argv[]) {
 
   struct key_info key_info;
   generate_key(&key_info);
-  encrypt_functions(elf_buf, elf_buf_size, &key_info);
+  encrypt_funcs(elf_buf, elf_buf_size, &key_info);
   encrypt_binary(elf_buf, loader_x86_64, sizeof(loader_x86_64),
                  elf_buf_size, &key_info);
 

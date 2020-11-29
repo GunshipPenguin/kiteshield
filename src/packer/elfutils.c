@@ -27,15 +27,19 @@ const Elf64_Shdr *elf_get_sec_by_name(void *elf_start, const char *name) {
 
 uint8_t *elf_get_sym(void *elf_start, const Elf64_Sym *sym) {
   Elf64_Ehdr *ehdr = elf_start;
+  Elf64_Phdr *first_phdr = (Elf64_Phdr *) (elf_start + ehdr->e_phoff);
 
-  Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
   for (int i = 0; i < ehdr->e_phnum; i++) {
+    Elf64_Phdr *curr_phdr = first_phdr + i;
+
+    if (curr_phdr->p_type != PT_LOAD)
+      continue;
+
     if (curr_phdr->p_vaddr <= sym->st_value &&
-        (curr_phdr->p_vaddr + curr_phdr->p_memsz) < sym->st_value) {
-      return (void *) (curr_phdr->p_offset +
-                      (curr_phdr->p_vaddr - sym->st_value));
+        (curr_phdr->p_vaddr + curr_phdr->p_memsz) > sym->st_value) {
+      return (void *) (elf_start + (curr_phdr->p_offset +
+                      (sym->st_value - curr_phdr->p_vaddr)));
     }
-    curr_phdr++;
   }
 
   return NULL;

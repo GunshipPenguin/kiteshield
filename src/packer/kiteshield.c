@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/random.h>
 #include <stdbool.h>
 #include <unistd.h>
 
@@ -142,14 +143,6 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
   return 0;
 }
 
-void generate_key(struct key_info *key_info) {
-  srand(time(NULL));
-  for (int i = 0; i < sizeof(key_info->key); i++) {
-    /* super duper cryptographically secure (TM) */
-    key_info->key[i] = rand() & 0xFF;
-  }
-}
-
 int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
   uint8_t *code = elf_get_sym(elf_start, func_sym);
 
@@ -271,7 +264,8 @@ int main(int argc, char *argv[]) {
   }
 
   struct key_info key_info;
-  generate_key(&key_info);
+  CK_NEQ_PERROR(getrandom(key_info.key, sizeof(key_info.key), 0), -1);
+
   encrypt_funcs(elf_buf, elf_buf_size, &key_info);
   encrypt_binary(elf_buf, loader_x86_64, sizeof(loader_x86_64),
                  elf_buf_size, &key_info);

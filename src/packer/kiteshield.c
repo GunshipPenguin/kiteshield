@@ -175,19 +175,20 @@ static int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
   return 0;
 }
 
-static int encrypt_funcs(void *elf_start, size_t elf_size,
-                         struct key_info *key_info) {
+static int apply_inner_encryption(void *elf_start, size_t elf_size,
+                                  struct key_info *key_info) {
   const Elf64_Ehdr *ehdr = elf_start;
-  verbose("attempting to instrument and encrypt functions\n");
+  verbose("attempting to apply inner encryption (per-function encryption)\n");
 
   if (ehdr->e_shoff == 0 || !elf_get_sec_by_name(elf_start, ".symtab")) {
-    printf("binary is stripped, not encrypting functions\n");
+    printf("binary is stripped, not applying inner encryption\n");
     return -1;
   }
 
   const Elf64_Shdr *strtab = elf_get_sec_by_name(elf_start, ".strtab");
   if (strtab == NULL) {
-    fprintf(stderr, "could not find string table, not encrypting functions\n");
+    fprintf(stderr,
+            "could not find string table, not applying inner encryption\n");
     return -1;
   }
 
@@ -204,9 +205,9 @@ static int encrypt_funcs(void *elf_start, size_t elf_size,
   return 0;
 }
 
-static void encrypt_binary(void *packed_bin_start, void *loader_start,
-                           size_t loader_size, size_t packed_bin_size,
-                           struct key_info *key_info) {
+static void apply_outer_encryption(void *packed_bin_start, void *loader_start,
+                                   size_t loader_size, size_t packed_bin_size,
+                                   struct key_info *key_info) {
   verbose("RC4 encrypting binary with key ");
   for (int i = 0; i < sizeof(key_info->key); i++) {
     verbose("%hhx ", key_info->key[i]);
@@ -234,22 +235,22 @@ static void encrypt_binary(void *packed_bin_start, void *loader_start,
 
 static void usage() {
   printf(
-      "Kiteshield, a obfuscating packer for x86-64 binaries on Linux\n"
+      "Kiteshield, an obfuscating packer for x86-64 binaries on Linux\n"
       "Usage: kiteshield [OPTION] INPUT_FILE OUTPUT_FILE\n\n"
-      "  -n       don't encrypt functions\n"
+      "  -n       don't apply inner encryption (per-function encryption)\n"
       "  -v       verbose\n"
   );
 }
 
 int main(int argc, char *argv[]) {
   char *input_bin, *output_bin;
-  int function_encryption = 1;
+  int use_inner_encryption = 1;
 
   int c;
   while ((c = getopt (argc, argv, "nv")) != -1) {
     switch (c) {
     case 'n':
-      function_encryption = 0;
+      use_inner_encryption = 0;
       break;
     case 'v':
       log_verbose = 1;
@@ -271,22 +272,22 @@ int main(int argc, char *argv[]) {
   void *elf_buf;
   size_t elf_buf_size;
   if (read_input_elf(input_bin, &elf_buf, &elf_buf_size) == -1) {
-    fprintf(stderr, "error reading input ELF");
+    fprintf(stderr, "error reading input ELF\n");
     return -1;
   }
 
   struct key_info key_info;
   CK_NEQ_PERROR(getrandom(key_info.key, sizeof(key_info.key), 0), -1);
 
-  if (function_encryption) {
-    if (encrypt_funcs(elf_buf, elf_buf_size, &key_info) == -1) {
-      fprintf(stderr, "could not encrypt functions -- exiting\n");
+  if (use_inner_encryption) {
+    if (apply_inner_encryption(elf_buf, elf_buf_size, &key_info) == -1) {
+      fprintf(stderr, "could not apply inner encryption\n");
       return -1;
     }
   }
 
-  encrypt_binary(elf_buf, loader_x86_64, sizeof(loader_x86_64),
-                 elf_buf_size, &key_info);
+  apply_outer_encryption(elf_buf, loader_x86_64, sizeof(loader_x86_64),
+                         elf_buf_size, &key_info);
 
   FILE *output_elf;
   CK_NEQ_PERROR(output_elf = fopen(output_bin, "w"), NULL);

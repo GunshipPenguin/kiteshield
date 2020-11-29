@@ -160,7 +160,9 @@ static int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
     /* Ret opcodes */
     if (ix.PrimaryOpCode == 0xC3 || ix.PrimaryOpCode == 0xCB ||
         ix.PrimaryOpCode == 0xC2 || ix.PrimaryOpCode == 0xCA) {
-      printf("instrumenting ret instruction at %hhn with int3", code_ptr);
+      verbose(
+          "instrumenting ret instruction at offset %d in original binary\n",
+          code_ptr - (uint8_t *) elf_start);
       /* 0xCC = int3 (one byte instruction) */
       *code_ptr = (uint8_t) 0xCC;
     }
@@ -176,6 +178,7 @@ static int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
 static int encrypt_funcs(void *elf_start, size_t elf_size,
                          struct key_info *key_info) {
   const Elf64_Ehdr *ehdr = elf_start;
+  verbose("attempting to instrument and encrypt functions\n");
 
   if (ehdr->e_shoff == 0 || !elf_get_sec_by_name(elf_start, ".symtab")) {
     printf("binary is stripped, not encrypting functions\n");
@@ -293,5 +296,6 @@ int main(int argc, char *argv[]) {
   CK_NEQ_PERROR(
       chmod(output_bin, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH), -1);
 
+  printf("output ELF has been written to %s\n", output_bin);
   return 0;
 }

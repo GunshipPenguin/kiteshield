@@ -5,6 +5,7 @@ cmake-build*
 
 # Vim
 *~
+*.swp
 
 # Build artifacts
 obj/

@@ -3,14 +3,15 @@
 #include <elf.h>
 #include <fcntl.h>
 #include <string.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include "bddisasm.h"
 
 #include "packer/include/elfutils.h"
-#include "packer/include/utils.h"
 #include "common/include/rc4.h"
 #include "common/include/key_utils.h"
 #include "common/include/defs.h"
@@ -22,27 +23,49 @@
  * the first layer of encryption, and run it. */
 #define APP_VADDR 0xA00000ULL
 
+#define CK_NEQ_PERROR(stmt, err)                                              \
+  do {                                                                        \
+    if ((stmt) == err) {                                                      \
+      perror(#stmt);                                                          \
+      return -1;                                                              \
+    }                                                                         \
+  } while(0)
+
+static int log_verbose = 0;
+
+/* Needs to be defined for bddisasm */
 int nd_vsnprintf_s(char *buffer, size_t sizeOfBuffer, size_t count,
                    const char *format, va_list argptr) {
   return vsnprintf(buffer, sizeOfBuffer, format, argptr);
 }
 
+/* Needs to be defined for bddisasm */
 void* nd_memset(void *s, int c, size_t n)  {
   return memset(s, c, n);
 }
 
+void verbose(char *fmt, ...) {
+  if (!log_verbose)
+    return;
+
+  va_list args;
+  va_start(args, fmt);
+
+  vprintf(fmt, args);
+}
+
 int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
   FILE *file;
-  CK(file = fopen(path, "r"), NULL);
-  CK(fseek(file, 0L, SEEK_END), -1);
+  CK_NEQ_PERROR(file = fopen(path, "r"), NULL);
+  CK_NEQ_PERROR(fseek(file, 0L, SEEK_END), -1);
 
-  CK(*elf_buf_size = ftell(file), -1);
-  CK(*buf_ptr = malloc(*elf_buf_size), NULL);
+  CK_NEQ_PERROR(*elf_buf_size = ftell(file), -1);
+  CK_NEQ_PERROR(*buf_ptr = malloc(*elf_buf_size), NULL);
 
-  CK(fseek(file, 0L, SEEK_SET), -1);
-  CK(fread(*buf_ptr, *elf_buf_size, 1, file), 0);
+  CK_NEQ_PERROR(fseek(file, 0L, SEEK_SET), -1);
+  CK_NEQ_PERROR(fread(*buf_ptr, *elf_buf_size, 1, file), 0);
 
-  CK(fclose(file), EOF);
+  CK_NEQ_PERROR(fclose(file), EOF);
 
   return 0;
 }
@@ -57,36 +80,64 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
                            (sizeof(Elf64_Phdr) * 2) +
                            sizeof(struct key_info);
   Elf64_Ehdr ehdr;
-  init_ehdr(&ehdr, entry_vaddr);
-  CK(fwrite(&ehdr, sizeof(ehdr), 1, output_file), 0);
+  ehdr.e_ident[EI_MAG0] = ELFMAG0;
+  ehdr.e_ident[EI_MAG1] = ELFMAG1;
+  ehdr.e_ident[EI_MAG2] = ELFMAG2;
+  ehdr.e_ident[EI_MAG3] = ELFMAG3;
+  ehdr.e_ident[EI_CLASS] = ELFCLASS64;
+  ehdr.e_ident[EI_DATA] = ELFDATA2LSB;
+  ehdr.e_ident[EI_VERSION] = EV_CURRENT;
+  ehdr.e_ident[EI_OSABI] = ELFOSABI_SYSV;
+  ehdr.e_ident[EI_ABIVERSION] = 0;
+  memset(ehdr.e_ident + EI_PAD, 0, EI_NIDENT - EI_PAD);
+
+  ehdr.e_type = ET_EXEC;
+  ehdr.e_machine = EM_X86_64;
+  ehdr.e_version = EV_CURRENT;
+  ehdr.e_entry = entry_vaddr;
+  ehdr.e_phoff = sizeof(Elf64_Ehdr);
+  ehdr.e_shoff = 0;
+  ehdr.e_flags = 0;
+  ehdr.e_ehsize = sizeof(Elf64_Ehdr);
+  ehdr.e_phentsize = sizeof(Elf64_Phdr);
+  ehdr.e_phnum = 2;
+  ehdr.e_shentsize = sizeof(Elf64_Shdr);
+  ehdr.e_shnum = 0;
+  ehdr.e_shstrndx = SHN_UNDEF;
+
+  CK_NEQ_PERROR(fwrite(&ehdr, sizeof(ehdr), 1, output_file), 0);
 
   /* Program header for stub */
   Elf64_Phdr stub_phdr;
-  init_phdr(&stub_phdr,
-      0,
-      KITESHIELD_STUB_BASE,
-      sizeof(loader_x86_64),
-      PF_R | PF_W | PF_X,
-      0x200000);
-  CK(fwrite(&stub_phdr, sizeof(stub_phdr), 1, output_file), 0);
+  stub_phdr.p_type = PT_LOAD;
+  stub_phdr.p_offset = 0;
+  stub_phdr.p_vaddr = KITESHIELD_STUB_BASE;
+  stub_phdr.p_paddr = stub_phdr.p_vaddr;
+  stub_phdr.p_filesz = sizeof(loader_x86_64);
+  stub_phdr.p_memsz = sizeof(loader_x86_64);
+  stub_phdr.p_flags = PF_R | PF_W | PF_X;
+  stub_phdr.p_align = 0x200000;
+  CK_NEQ_PERROR(fwrite(&stub_phdr, sizeof(stub_phdr), 1, output_file), 0);
 
   /* Program header for packed application */
-  Elf64_Off app_offset = ftell(output_file) + sizeof(Elf64_Phdr) + sizeof(loader_x86_64);
-  Elf64_Addr app_vaddr = APP_VADDR + app_offset; /* Keep vaddr aligned with offset */
+  int app_offset = ftell(output_file) + sizeof(Elf64_Phdr) + sizeof(loader_x86_64);
   Elf64_Phdr app_phdr;
-  init_phdr(&app_phdr,
-      app_offset,
-      app_vaddr,
-      input_elf_size,
-      PF_R | PF_W,
-      0x200000);
-  CK(fwrite(&app_phdr, sizeof(app_phdr), 1, output_file), 0);
+  app_phdr.p_type = PT_LOAD;
+  app_phdr.p_offset = app_offset;
+  app_phdr.p_vaddr = APP_VADDR + app_offset; /* Keep vaddr aligned */
+  app_phdr.p_paddr = app_phdr.p_vaddr;
+  app_phdr.p_filesz = input_elf_size;
+  app_phdr.p_memsz = input_elf_size;
+  app_phdr.p_flags = PF_R | PF_W;
+  app_phdr.p_align =  0x200000;
+  CK_NEQ_PERROR(fwrite(&app_phdr, sizeof(app_phdr), 1, output_file), 0);
 
   /* Stub loader contents */
-  CK(fwrite(loader_x86_64, sizeof(loader_x86_64), 1, output_file), 0);
+  CK_NEQ_PERROR(
+      fwrite(loader_x86_64, sizeof(loader_x86_64), 1, output_file), 0);
 
   /* Packed application contents */
-  CK(fwrite(input_elf, input_elf_size, 1, output_file), 0);
+  CK_NEQ_PERROR(fwrite(input_elf, input_elf_size, 1, output_file), 0);
 
   return 0;
 }
@@ -130,9 +181,16 @@ int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
 
 int encrypt_funcs(void *elf_start, size_t elf_size,
                   struct key_info *key_info) {
+  const Elf64_Ehdr *ehdr = elf_start;
+
+  if (ehdr->e_shoff == 0 || !elf_get_sec_by_name(elf_start, ".symtab")) {
+    printf("Binary is stripped, not encrypting functions\n");
+    return -1;
+  }
+
   const Elf64_Shdr *strtab = elf_get_sec_by_name(elf_start, ".strtab");
   if (strtab == NULL) {
-    fprintf(stderr, "Could not find string table, not encrypting functions");
+    fprintf(stderr, "Could not find string table, not encrypting functions\n");
     return -1;
   }
 
@@ -140,7 +198,7 @@ int encrypt_funcs(void *elf_start, size_t elf_size,
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
 
-    printf("Found function symbol %s\n",
+    verbose("Instrumenting function %s\n",
             elf_get_sym_name(elf_start, sym, strtab));
 
     instrument_func(elf_start, sym);
@@ -152,11 +210,11 @@ int encrypt_funcs(void *elf_start, size_t elf_size,
 void encrypt_binary(void *packed_bin_start, void *loader_start,
                     size_t loader_size, size_t packed_bin_size,
                     struct key_info *key_info) {
-  printf("RC4 encrypting binary with key ");
+  verbose("RC4 encrypting binary with key ");
   for (int i = 0; i < sizeof(key_info->key); i++) {
-    printf("%hhx ", key_info->key[i]);
+    verbose("%hhx ", key_info->key[i]);
   }
-  printf("\n");
+  verbose("\n");
 
   struct rc4_state rc4;
   rc4_init(&rc4, key_info->key, sizeof(key_info->key));
@@ -177,15 +235,40 @@ void encrypt_binary(void *packed_bin_start, void *loader_start,
   *((struct key_info *) loader_start) = obfuscated_key;
 }
 
+void usage() {
+  printf("Kiteshield, a obfuscating packer for x86-64 binaries on Linux\n");
+  printf("Usage: kiteshield [OPTION] INPUT_FILE OUTPUT_FILE\n");
+}
+
 int main(int argc, char *argv[]) {
-  if (argc != 3) {
-    printf("Usage: kiteshield <input> <output>\n");
-    exit(1);
+  char *input_bin, *output_bin;
+
+  int c;
+  while ((c = getopt (argc, argv, "v")) != -1) {
+    switch (c) {
+    case 'v':
+      log_verbose = 1;
+      break;
+    default:
+      usage();
+      return -1;
+    }
+  }
+
+  if (optind + 1 < argc) {
+    input_bin = argv[optind];
+    output_bin = argv[optind + 1];
+  } else {
+    usage();
+    return -1;
   }
 
   void *elf_buf;
   size_t elf_buf_size;
-  CK(read_input_elf(argv[1], &elf_buf, &elf_buf_size), -1);
+  if (read_input_elf(input_bin, &elf_buf, &elf_buf_size) == -1) {
+    fprintf(stderr, "Error reading input ELF");
+    return -1;
+  }
 
   struct key_info key_info;
   generate_key(&key_info);
@@ -194,11 +277,12 @@ int main(int argc, char *argv[]) {
                  elf_buf_size, &key_info);
 
   FILE *output_elf;
-  CK(output_elf = fopen(argv[2], "w"), NULL);
-  CK(produce_output_elf(output_elf, elf_buf, elf_buf_size), -1);
+  CK_NEQ_PERROR(output_elf = fopen(output_bin, "w"), NULL);
+  CK_NEQ_PERROR(produce_output_elf(output_elf, elf_buf, elf_buf_size), -1);
 
-  CK(fclose(output_elf), EOF);
-  CK(chmod(argv[2], S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH), -1);
+  CK_NEQ_PERROR(fclose(output_elf), EOF);
+  CK_NEQ_PERROR(
+      chmod(output_bin, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH), -1);
 
   return 0;
 }

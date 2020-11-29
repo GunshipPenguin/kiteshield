@@ -230,16 +230,24 @@ static void encrypt_binary(void *packed_bin_start, void *loader_start,
 }
 
 static void usage() {
-  printf("Kiteshield, a obfuscating packer for x86-64 binaries on Linux\n");
-  printf("Usage: kiteshield [OPTION] INPUT_FILE OUTPUT_FILE\n");
+  printf(
+      "Kiteshield, a obfuscating packer for x86-64 binaries on Linux\n"
+      "Usage: kiteshield [OPTION] INPUT_FILE OUTPUT_FILE\n\n"
+      "  -n       don't encrypt functions\n"
+      "  -v       verbose\n"
+  );
 }
 
 int main(int argc, char *argv[]) {
   char *input_bin, *output_bin;
+  int function_encryption = 1;
 
   int c;
-  while ((c = getopt (argc, argv, "v")) != -1) {
+  while ((c = getopt (argc, argv, "nv")) != -1) {
     switch (c) {
+    case 'n':
+      function_encryption = 0;
+      break;
     case 'v':
       log_verbose = 1;
       break;
@@ -267,7 +275,13 @@ int main(int argc, char *argv[]) {
   struct key_info key_info;
   CK_NEQ_PERROR(getrandom(key_info.key, sizeof(key_info.key), 0), -1);
 
-  encrypt_funcs(elf_buf, elf_buf_size, &key_info);
+  if (function_encryption) {
+    if (encrypt_funcs(elf_buf, elf_buf_size, &key_info) == -1) {
+      fprintf(stderr, "could not encrypt functions -- exiting\n");
+      return -1;
+    }
+  }
+
   encrypt_binary(elf_buf, loader_x86_64, sizeof(loader_x86_64),
                  elf_buf_size, &key_info);
 

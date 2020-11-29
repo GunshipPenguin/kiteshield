@@ -293,7 +293,9 @@ int main(int argc, char *argv[]) {
 
   FILE *output_elf;
   CK_NEQ_PERROR(output_elf = fopen(output_bin, "w"), NULL);
-  CK_NEQ_PERROR(produce_output_elf(output_elf, elf_buf, elf_buf_size), -1);
+  if (produce_output_elf(output_elf, elf_buf, elf_buf_size) == -1) {
+    fprintf(stderr, "could not produce output ELF\n");
+  }
 
   CK_NEQ_PERROR(fclose(output_elf), EOF);
   CK_NEQ_PERROR(

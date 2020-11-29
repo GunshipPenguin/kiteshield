@@ -45,7 +45,7 @@ void* nd_memset(void *s, int c, size_t n)  {
   return memset(s, c, n);
 }
 
-void verbose(char *fmt, ...) {
+static void verbose(char *fmt, ...) {
   if (!log_verbose)
     return;
 
@@ -55,7 +55,7 @@ void verbose(char *fmt, ...) {
   vprintf(fmt, args);
 }
 
-int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
+static int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
   FILE *file;
   CK_NEQ_PERROR(file = fopen(path, "r"), NULL);
   CK_NEQ_PERROR(fseek(file, 0L, SEEK_END), -1);
@@ -71,7 +71,8 @@ int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
   return 0;
 }
 
-int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size) {
+static int produce_output_elf(FILE *output_file, void *input_elf,
+                              size_t input_elf_size) {
   /* The entry address is located right after the struct key_info (used for
    * passing decryption key and other info to loader), which is the first
    * sizeof(struct key_info) bytes of the loader code (guaranteed by the linker
@@ -143,7 +144,7 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
   return 0;
 }
 
-int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
+static int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
   uint8_t *code = elf_get_sym(elf_start, func_sym);
 
   uint8_t *code_ptr = code;
@@ -172,8 +173,8 @@ int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
   return 0;
 }
 
-int encrypt_funcs(void *elf_start, size_t elf_size,
-                  struct key_info *key_info) {
+static int encrypt_funcs(void *elf_start, size_t elf_size,
+                         struct key_info *key_info) {
   const Elf64_Ehdr *ehdr = elf_start;
 
   if (ehdr->e_shoff == 0 || !elf_get_sec_by_name(elf_start, ".symtab")) {
@@ -200,9 +201,9 @@ int encrypt_funcs(void *elf_start, size_t elf_size,
   return 0;
 }
 
-void encrypt_binary(void *packed_bin_start, void *loader_start,
-                    size_t loader_size, size_t packed_bin_size,
-                    struct key_info *key_info) {
+static void encrypt_binary(void *packed_bin_start, void *loader_start,
+                           size_t loader_size, size_t packed_bin_size,
+                           struct key_info *key_info) {
   verbose("RC4 encrypting binary with key ");
   for (int i = 0; i < sizeof(key_info->key); i++) {
     verbose("%hhx ", key_info->key[i]);
@@ -228,7 +229,7 @@ void encrypt_binary(void *packed_bin_start, void *loader_start,
   *((struct key_info *) loader_start) = obfuscated_key;
 }
 
-void usage() {
+static void usage() {
   printf("Kiteshield, a obfuscating packer for x86-64 binaries on Linux\n");
   printf("Usage: kiteshield [OPTION] INPUT_FILE OUTPUT_FILE\n");
 }

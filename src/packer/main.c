@@ -9,6 +9,7 @@
 
 #include "bddisasm.h"
 
+#include "packer/include/elfutils.h"
 #include "packer/include/utils.h"
 #include "common/include/rc4.h"
 #include "common/include/key_utils.h"
@@ -90,28 +91,46 @@ int produce_output_elf(FILE *output_file, void *input_elf, size_t input_elf_size
   return 0;
 }
 
-void encrypt_binary(void *packed_bin_start, void *loader_start,
-                    size_t loader_size, size_t packed_bin_size) {
-  /* Generate key */
-  struct key_info key_info;
+void generate_key(struct key_info *key_info) {
   srand(time(NULL));
-  for (int i = 0; i < sizeof(key_info.key); i++) {
+  for (int i = 0; i < sizeof(key_info->key); i++) {
     /* super duper cryptographically secure (TM) */
-    key_info.key[i] = rand() & 0xFF;
+    key_info->key[i] = rand() & 0xFF;
+  }
+}
+
+
+int encrypt_functions(void *elf_start, size_t elf_size,
+                      struct key_info *key_info) {
+  const Elf64_Shdr *strtab = elf_get_sec_by_name(elf_start, ".strtab");
+  if (strtab == NULL) {
+    fprintf(stderr, "Could not find string table, not encrypting functions");
+    return -1;
   }
 
+  ELF_FOR_EACH_SYMBOL(elf_start, sym) {
+    if (ELF64_ST_TYPE(sym->st_info) == STT_FUNC)
+      printf("Found function symbol %s\n", elf_get_sym_name(elf_start, sym, strtab));
+  }
+
+  return 0;
+}
+
+void encrypt_binary(void *packed_bin_start, void *loader_start,
+                    size_t loader_size, size_t packed_bin_size,
+                    struct key_info *key_info) {
   printf("RC4 encrypting binary with key ");
-  for (int i = 0; i < sizeof(key_info.key); i++) {
-    printf("%hhx ", key_info.key[i]);
+  for (int i = 0; i < sizeof(key_info->key); i++) {
+    printf("%hhx ", key_info->key[i]);
   }
   printf("\n");
 
   struct rc4_state rc4;
-  rc4_init(&rc4, key_info.key, sizeof(key_info.key));
+  rc4_init(&rc4, key_info->key, sizeof(key_info->key));
 
   /* Obfuscate Key */
   struct key_info obfuscated_key;
-  obf_deobf_key(&key_info, &obfuscated_key, loader_start, loader_size);
+  obf_deobf_key(key_info, &obfuscated_key, loader_start, loader_size);
 
   /* Encrypt the actual binary */
   /* skip the first sizeof(struct key_info) bytes as that has the key itself */
@@ -135,7 +154,11 @@ int main(int argc, char *argv[]) {
   size_t elf_buf_size;
   CK(read_input_elf(argv[1], &elf_buf, &elf_buf_size), -1);
 
-  encrypt_binary(elf_buf, loader_x86_64, sizeof(loader_x86_64), elf_buf_size);
+  struct key_info key_info;
+  generate_key(&key_info);
+  encrypt_functions(elf_buf, elf_buf_size, &key_info);
+  encrypt_binary(elf_buf, loader_x86_64, sizeof(loader_x86_64),
+                 elf_buf_size, &key_info);
 
   FILE *output_elf;
   CK(output_elf = fopen(argv[2], "w"), NULL);

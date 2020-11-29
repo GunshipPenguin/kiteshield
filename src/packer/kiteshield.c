@@ -153,14 +153,14 @@ static int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
     NDSTATUS status = NdDecode(&ix, code_ptr, ND_CODE_64, ND_DATA_64);
 
     if (!ND_SUCCESS(status)) {
-      fprintf(stderr, "Instruction decoding failed\n");
+      fprintf(stderr, "instruction decoding failed\n");
       return -1;
     }
 
     /* Ret opcodes */
     if (ix.PrimaryOpCode == 0xC3 || ix.PrimaryOpCode == 0xCB ||
         ix.PrimaryOpCode == 0xC2 || ix.PrimaryOpCode == 0xCA) {
-      printf("Instrumenting ret instruction at %hhn with int3", code_ptr);
+      printf("instrumenting ret instruction at %hhn with int3", code_ptr);
       /* 0xCC = int3 (one byte instruction) */
       *code_ptr = (uint8_t) 0xCC;
     }
@@ -178,13 +178,13 @@ static int encrypt_funcs(void *elf_start, size_t elf_size,
   const Elf64_Ehdr *ehdr = elf_start;
 
   if (ehdr->e_shoff == 0 || !elf_get_sec_by_name(elf_start, ".symtab")) {
-    printf("Binary is stripped, not encrypting functions\n");
+    printf("binary is stripped, not encrypting functions\n");
     return -1;
   }
 
   const Elf64_Shdr *strtab = elf_get_sec_by_name(elf_start, ".strtab");
   if (strtab == NULL) {
-    fprintf(stderr, "Could not find string table, not encrypting functions\n");
+    fprintf(stderr, "could not find string table, not encrypting functions\n");
     return -1;
   }
 
@@ -192,7 +192,7 @@ static int encrypt_funcs(void *elf_start, size_t elf_size,
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
 
-    verbose("Instrumenting function %s\n",
+    verbose("instrumenting function %s\n",
             elf_get_sym_name(elf_start, sym, strtab));
 
     instrument_func(elf_start, sym);
@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
   void *elf_buf;
   size_t elf_buf_size;
   if (read_input_elf(input_bin, &elf_buf, &elf_buf_size) == -1) {
-    fprintf(stderr, "Error reading input ELF");
+    fprintf(stderr, "error reading input ELF");
     return -1;
   }
 

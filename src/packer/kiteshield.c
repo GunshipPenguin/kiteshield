@@ -117,7 +117,7 @@ static int produce_output_elf(FILE *output_file, void *input_elf,
   stub_phdr.p_paddr = stub_phdr.p_vaddr;
   stub_phdr.p_filesz = sizeof(loader_x86_64);
   stub_phdr.p_memsz = sizeof(loader_x86_64);
-  stub_phdr.p_flags = PF_R | PF_W | PF_X;
+  stub_phdr.p_flags = PF_R | PF_X;
   stub_phdr.p_align = 0x200000;
   CK_NEQ_PERROR(fwrite(&stub_phdr, sizeof(stub_phdr), 1, output_file), 0);
 

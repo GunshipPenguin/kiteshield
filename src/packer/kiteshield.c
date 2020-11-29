@@ -178,6 +178,7 @@ static int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
 static int apply_inner_encryption(void *elf_start, size_t elf_size,
                                   struct key_info *key_info) {
   const Elf64_Ehdr *ehdr = elf_start;
+
   verbose("attempting to apply inner encryption (per-function encryption)\n");
 
   if (ehdr->e_shoff == 0 || !elf_get_sec_by_name(elf_start, ".symtab")) {
@@ -208,14 +209,10 @@ static int apply_inner_encryption(void *elf_start, size_t elf_size,
 static void apply_outer_encryption(void *packed_bin_start, void *loader_start,
                                    size_t loader_size, size_t packed_bin_size,
                                    struct key_info *key_info) {
-  verbose("RC4 encrypting binary with key ");
-  for (int i = 0; i < sizeof(key_info->key); i++) {
-    verbose("%hhx ", key_info->key[i]);
-  }
-  verbose("\n");
-
   struct rc4_state rc4;
   rc4_init(&rc4, key_info->key, sizeof(key_info->key));
+
+  verbose("attempting to apply outer encryption (whole-binary encryption)\n");
 
   /* Obfuscate Key */
   struct key_info obfuscated_key;
@@ -278,6 +275,11 @@ int main(int argc, char *argv[]) {
 
   struct key_info key_info;
   CK_NEQ_PERROR(getrandom(key_info.key, sizeof(key_info.key), 0), -1);
+  verbose("using key ");
+  for (int i = 0; i < sizeof(key_info.key); i++) {
+    verbose("%02hhx ", key_info.key[i]);
+  }
+  verbose("for RC4 encryption\n");
 
   if (use_inner_encryption) {
     if (apply_inner_encryption(elf_buf, elf_buf_size, &key_info) == -1) {

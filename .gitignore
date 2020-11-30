@@ -9,8 +9,9 @@ cmake-build*
 
 # Build artifacts
 obj/
-src/packer/kiteshield
-src/loaders/loader_headers
+packer/kiteshield
+loader_stub.h
 
 # Packed binaries
 *.ks
+

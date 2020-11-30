@@ -1,7 +1,7 @@
 #ifdef DEBUG_OUTPUT
 
-#include "loaders/platform_independent/include/arch_typedefs.h"
-#include "loaders/platform_independent/include/debug.h"
+#include "loader/include/arch_typedefs.h"
+#include "loader/include/debug.h"
 
 #define BITS(type) (sizeof(type) * 8)
 

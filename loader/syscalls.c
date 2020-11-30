@@ -1,4 +1,4 @@
-#include "loaders/platform_independent/include/arch_typedefs.h"
+#include "loader/include/arch_typedefs.h"
 
 ssize_t write(int fd, const char *s, size_t count) {
   ssize_t bytes_written;

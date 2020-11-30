@@ -12,11 +12,12 @@
 
 #include "bddisasm.h"
 
-#include "packer/include/elfutils.h"
 #include "common/include/rc4.h"
 #include "common/include/key_utils.h"
 #include "common/include/defs.h"
-#include "loaders/loader_headers/loader_x86_64.h"
+#include "packer/include/elfutils.h"
+
+#include "loader/loader_stub.h"
 
 /* Virtual address at which the twice encrypted ELF is to be
  * initially loaded by the kernel (this is the p_vaddr field).
@@ -304,3 +305,4 @@ int main(int argc, char *argv[]) {
   printf("output ELF has been written to %s\n", output_bin);
   return 0;
 }
+

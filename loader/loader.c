@@ -4,11 +4,11 @@
 #include "common/include/rc4.h"
 #include "common/include/key_utils.h"
 
-#include "loaders/arch/x86_64/include/syscall_defines.h"
-#include "loaders/platform_independent/include/arch_typedefs.h"
-#include "loaders/platform_independent/include/debug.h"
-#include "loaders/platform_independent/include/elf_auxv.h"
-#include "loaders/platform_independent/include/syscalls.h"
+#include "loader/include/syscall_defines.h"
+#include "loader/include/arch_typedefs.h"
+#include "loader/include/debug.h"
+#include "loader/include/elf_auxv.h"
+#include "loader/include/syscalls.h"
 
 /* Base address to copy the application to before launching */
 #define ENCRYPTED_APP_LOAD_ADDR 0x800000000ULL

@@ -1,19 +1,21 @@
-all: loaders packer
+.PHONY: loader packer
 
-debug: loaders_debug packer_debug
+all: loader packer
+
+debug: loader_debug packer_debug
 
 packer:
-	$(MAKE) -C src/packer
+	$(MAKE) -C packer
 
 packer_debug:
-	$(MAKE) debug -C src/packer
+	$(MAKE) debug -C packer
 
-loaders:
-	$(MAKE) -C src/loaders
+loader:
+	$(MAKE) -C loader
 
-loaders_debug:
-	$(MAKE) debug -C src/loaders
+loader_debug:
+	$(MAKE) debug -C loader
 
 clean:
-	$(MAKE) clean -C src/loaders
-	$(MAKE) clean -C src/packer
+	$(MAKE) clean -C loader
+	$(MAKE) clean -C packer

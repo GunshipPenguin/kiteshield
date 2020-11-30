@@ -2,7 +2,7 @@
 #define KITESHIELD_DEBUG_H_
 
 #include <stdarg.h>
-#include "loaders/platform_independent/include/syscalls.h"
+#include "loader/include/syscalls.h"
 
 #define KITESHIELD_PREFIX "[kiteshield] "
 

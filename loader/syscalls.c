@@ -103,12 +103,12 @@ int mprotect(void *addr, size_t len, int prot) {
   return ret;
 }
 
-long ptrace (enum __ptrace_request request, pid_t pid, void *addr,
+long ptrace(enum __ptrace_request request, pid_t pid, void *addr,
              void *data) {
   long ret = -1;
 
   asm("movq $101, %%rax\n"
-      "movq %1, %%rdi\n"
+      "movl %1, %%edi\n"
       "movq %2, %%rsi\n"
       "movl %3, %%edx\n"
       "movq %4, %%r10\n"
@@ -116,6 +116,25 @@ long ptrace (enum __ptrace_request request, pid_t pid, void *addr,
       "movq %%rax, %0\n"
   :   "+rm" (ret)
   :   "rm" (request), "rm" (pid), "rm" (addr), "rm" (data));
+
+  return ret;
+}
+
+pid_t wait(int *wstatus) {
+  pid_t ret = -1;
+
+  /* The glibc wait actually wraps the wait4 syscall, which takes 4 arguments
+   * we pass in NULL/-1 as needed for those args to get the same behaviour
+   * as the glibc wrapper */
+  asm("movq $61, %%rax\n"
+      "movq $-1, %%rdi\n"
+      "movq %1, %%rsi\n"
+      "movq $0, %%rdx\n"
+      "movq $0, %%r10\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (wstatus));
 
   return ret;
 }

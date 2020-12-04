@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 /* mmap syscall constants */
-#define MAP_SHARED	0x01
-#define MAP_PRIVATE	0x02
+#define MAP_SHARED 0x01
+#define MAP_PRIVATE 0x02
 #define MAP_ANONYMOUS 0x20
 #define MAP_FIXED 0x10
 
@@ -70,28 +70,28 @@ enum __ptrace_request {
 };
 
 enum __ptrace_setoptions {
-  PTRACE_O_TRACESYSGOOD	= 0x00000001,
-  PTRACE_O_TRACEFORK	= 0x00000002,
-  PTRACE_O_TRACEVFORK	= 0x00000004,
-  PTRACE_O_TRACECLONE	= 0x00000008,
-  PTRACE_O_TRACEEXEC	= 0x00000010,
+  PTRACE_O_TRACESYSGOOD = 0x00000001,
+  PTRACE_O_TRACEFORK = 0x00000002,
+  PTRACE_O_TRACEVFORK = 0x00000004,
+  PTRACE_O_TRACECLONE = 0x00000008,
+  PTRACE_O_TRACEEXEC = 0x00000010,
   PTRACE_O_TRACEVFORKDONE = 0x00000020,
-  PTRACE_O_TRACEEXIT	= 0x00000040,
-  PTRACE_O_TRACESECCOMP	= 0x00000080,
-  PTRACE_O_EXITKILL	= 0x00100000,
+  PTRACE_O_TRACEEXIT = 0x00000040,
+  PTRACE_O_TRACESECCOMP = 0x00000080,
+  PTRACE_O_EXITKILL = 0x00100000,
   PTRACE_O_SUSPEND_SECCOMP = 0x00200000,
-  PTRACE_O_MASK		= 0x003000ff
+  PTRACE_O_MASK  = 0x003000ff
 };
 
 enum __ptrace_eventcodes {
-  PTRACE_EVENT_FORK	= 1,
-  PTRACE_EVENT_VFORK	= 2,
-  PTRACE_EVENT_CLONE	= 3,
-  PTRACE_EVENT_EXEC	= 4,
+  PTRACE_EVENT_FORK = 1,
+  PTRACE_EVENT_VFORK = 2,
+  PTRACE_EVENT_CLONE = 3,
+  PTRACE_EVENT_EXEC = 4,
   PTRACE_EVENT_VFORK_DONE = 5,
-  PTRACE_EVENT_EXIT	= 6,
+  PTRACE_EVENT_EXIT = 6,
   PTRACE_EVENT_SECCOMP  = 7,
-  PTRACE_EVENT_STOP	= 128
+  PTRACE_EVENT_STOP = 128
 };
 
 struct __ptrace_peeksiginfo_args {
@@ -108,6 +108,18 @@ struct __ptrace_seccomp_metadata {
   uint64_t filter_off;
   uint64_t flags;
 };
+
+/* wait syscall constants */
+#define WEXITSTATUS(status) (((status) & 0xff00) >> 8)
+#define WTERMSIG(status) ((status) & 0x7f)
+#define WSTOPSIG(status) WEXITSTATUS(status)
+#define WIFEXITED(status) (WTERMSIG(status) == 0)
+#define WIFSIGNALED(status) \
+  (((signed char) (((status) & 0x7f) + 1) >> 1) > 0)
+#define WIFSTOPPED(status) (((status) & 0xff) == 0x7f)
+#ifdef WCONTINUED
+# define WIFCONTINUED(status) ((status) == W_CONTINUED)
+#endif
 
 #endif /* __KITESHIELD_SYSCALL_DEFINES_H */
 

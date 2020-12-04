@@ -8,27 +8,34 @@ _start:
   call load
 
   # Return value of load is entry of ld.so to jump to, keep it safe
-  mov %rax, %rbx
+  push %rax
 
   # Start the runtime in a new thread
   mov $57, %rax # fork
   syscall
 
   cmp $-1, %rax
-  je fork_failed
+  je exit
 
   cmp $0, %rax
   je child
 
-  # In original thread, pass control to ld.so
-  jmp *%rbx
-
-fork_failed:
-  mov $0, %rdi
+  # In the parent, call into our decryption runtime
+  call runtime_start
   jmp exit
 
 child:
-  call runtime_start
+  # In the child, set ourselves up to be traced and jump to program entry
+  call child_setup_ptrace
 
+  cmp $-1, %eax
+  je exit
+
+  pop %rbx
+  jmp *%rbx
+
+exit:
   mov $60, %rax
+  mov $0, %rdi
   syscall
+

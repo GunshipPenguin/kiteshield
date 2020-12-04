@@ -250,7 +250,7 @@ void *load(void *entry_stacktop) {
              (void *) (ENCRYPTED_APP_LOAD_ADDR + packed_bin_ehdr->e_phoff),
              interp_base, packed_bin_ehdr->e_phnum);
 
-  DEBUG("finished mapping binary into memory");
+  DEBUG("finished mapping binary into memory, preparing to fork");
   DEBUG_FMT("control will be passed to ld.so at %p", interp_entry);
 
   return interp_entry;

@@ -4,7 +4,6 @@
 ssize_t write(int fd, const char *s, size_t count) {
   ssize_t bytes_written;
 
-  /* sys_write */
   asm("mov $1, %%rax\n"
       "mov %1, %%edi\n"
       "mov %2, %%rsi\n"
@@ -20,7 +19,6 @@ ssize_t write(int fd, const char *s, size_t count) {
 ssize_t read(int fd, void *buf, size_t count) {
   ssize_t bytes_read;
 
-  /* sys_read */
   asm("mov $0, %%rax\n"
       "mov %1, %%rdi\n"
       "mov %2, %%rsi\n"
@@ -36,7 +34,6 @@ ssize_t read(int fd, void *buf, size_t count) {
 off_t lseek(int fd, off_t offset, int whence) {
   off_t ret_offset;
 
-  /* sys_lseek */
   asm("mov $8, %%rax\n"
       "mov %0, %%rdi\n"
       "mov %1, %%rsi\n"
@@ -52,7 +49,6 @@ off_t lseek(int fd, off_t offset, int whence) {
 int open(const char *pathname, int flags, int mode) {
   int fd = -1;
 
-  /* sys_open */
   asm("mov $2, %%rax\n"
       "movq %1, %%rdi\n"
       "mov %2, %%rsi\n"
@@ -66,7 +62,6 @@ int open(const char *pathname, int flags, int mode) {
 }
 
 void exit(int status) {
-  /* sys_exit */
   asm("mov $60, %%rax\n"
       "mov %0, %%rdi\n"
       "syscall"
@@ -77,7 +72,6 @@ void exit(int status) {
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
   void *ret = (void *) -1;
 
-  /* sys_mmap */
   asm("mov $9, %%rax\n"
       "mov %1, %%rdi\n"
       "mov %2, %%rsi\n"
@@ -97,7 +91,6 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 int mprotect(void *addr, size_t len, int prot) {
   int ret = -1;
 
-  /* sys_mmap */
   asm("movq $10, %%rax\n"
       "movq %1, %%rdi\n"
       "movq %2, %%rsi\n"
@@ -112,6 +105,18 @@ int mprotect(void *addr, size_t len, int prot) {
 
 long ptrace (enum __ptrace_request request, pid_t pid, void *addr,
              void *data) {
+  long ret = -1;
 
+  asm("movq $101, %%rax\n"
+      "movq %1, %%rdi\n"
+      "movq %2, %%rsi\n"
+      "movl %3, %%edx\n"
+      "movq %4, %%r10\n"
+      "syscall\n"
+      "movq %%rax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (request), "rm" (pid), "rm" (addr), "rm" (data));
+
+  return ret;
 }
 

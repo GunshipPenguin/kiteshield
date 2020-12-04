@@ -6,6 +6,7 @@
 typedef unsigned long long size_t;
 typedef signed long long ssize_t;
 typedef unsigned long long off_t;
+typedef int pid_t;
 
 #endif /* __KITESHIELD_TYPES_H */
 

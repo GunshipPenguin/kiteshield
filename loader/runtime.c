@@ -6,3 +6,4 @@
 void runtime_start() {
   return;
 }
+

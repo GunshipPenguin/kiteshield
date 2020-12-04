@@ -1,5 +1,5 @@
-#ifndef KITESHIELD_DEBUG_H_
-#define KITESHIELD_DEBUG_H_
+#ifndef __KITESHIELD_DEBUG_H
+#define __KITESHIELD_DEBUG_H
 
 #include <stdarg.h>
 #include "loader/include/syscalls.h"
@@ -83,4 +83,4 @@
 
 void minimal_printf(int fd, const char *format, ...);
 
-#endif
+#endif /* __KITESHIELD_DEBUG_H */

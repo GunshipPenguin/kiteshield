@@ -1,5 +1,5 @@
-#ifndef KITESHIELD_ELF_AUXV_H
-#define KITESHIELD_ELF_AUXV_H
+#ifndef __KITESHIELD_ELF_AUXV_H
+#define __KITESHIELD_ELF_AUXV_H
 
 #define AT_NULL   0 /* end of vector */
 #define AT_IGNORE 1 /* entry should be ignored */
@@ -27,4 +27,4 @@
 #define AT_HWCAP2 26 /* extension of AT_HWCAP */
 #define AT_EXECFN  31 /* filename of program */
 
-#endif // KITESHIELD_ELF_AUXV_H
+#endif /* __KITESHIELD_ELF_AUXV_H */

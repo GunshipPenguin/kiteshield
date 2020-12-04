@@ -1,6 +1,6 @@
 /* Definitions needed across loader/packer code */
-#ifndef KITESHIELD_DEFS_H_
-#define KITESHIELD_DEFS_H_
+#ifndef __KITESHIELD_DEFS_H
+#define __KITESHIELD_DEFS_H
 
 /* Virtual address at which the stub loader is placed */
 #define KITESHIELD_STUB_BASE 0x400000ULL
@@ -12,4 +12,5 @@ struct key_info {
   unsigned char key[KEY_SIZE];
 } __attribute__((packed));
 
-#endif
+#endif /* __KITESHIELD_DEFS_H */
+

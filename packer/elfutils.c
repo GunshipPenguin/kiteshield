@@ -45,6 +45,11 @@ uint8_t *elf_get_sym(void *elf_start, const Elf64_Sym *sym) {
   return NULL;
 }
 
+int elf_sec_contains_sym(const Elf64_Shdr *shdr, const Elf64_Sym *sym) {
+  return shdr->sh_addr <= sym->st_value &&
+         (shdr->sh_addr + shdr->sh_size) > sym->st_value;
+}
+
 const char *elf_get_sym_name(void *elf_start, const Elf64_Sym *sym,
                              const Elf64_Shdr *strtab) {
   return (const char *) (elf_start + strtab->sh_offset + sym->st_name);

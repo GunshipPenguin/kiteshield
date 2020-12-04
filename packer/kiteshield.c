@@ -177,10 +177,15 @@ static int instrument_func(void *elf_start, Elf64_Sym *func_sym) {
 }
 
 static int apply_inner_encryption(void *elf_start, size_t elf_size,
-                                  struct key_info *key_info) {
+    struct key_info *key_info) {
+  verbose("attempting to apply inner encryption (per-function encryption)\n");
   const Elf64_Ehdr *ehdr = elf_start;
 
-  verbose("attempting to apply inner encryption (per-function encryption)\n");
+  const Elf64_Shdr *text_shdr = elf_get_sec_by_name(elf_start, ".text");
+  if (!text_shdr) {
+    fprintf(stderr, "Could not find .text section");
+    return -1;
+  }
 
   if (ehdr->e_shoff == 0 || !elf_get_sec_by_name(elf_start, ".symtab")) {
     printf("binary is stripped, not applying inner encryption\n");
@@ -190,7 +195,7 @@ static int apply_inner_encryption(void *elf_start, size_t elf_size,
   const Elf64_Shdr *strtab = elf_get_sec_by_name(elf_start, ".strtab");
   if (strtab == NULL) {
     fprintf(stderr,
-            "could not find string table, not applying inner encryption\n");
+        "could not find string table, not applying inner encryption\n");
     return -1;
   }
 
@@ -198,18 +203,42 @@ static int apply_inner_encryption(void *elf_start, size_t elf_size,
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
 
-    verbose("instrumenting function %s\n",
-            elf_get_sym_name(elf_start, sym, strtab));
+    /* Skip instrumenting functions in cases where it simply will not work or
+     * has the potential to mess things up. Specifically, this means we don't
+     * instrument functions that:
+     *
+     *  - Are not in .text (eg. stuff in .init)
+     *  - Have an address of 0 (stuff that needs to be relocated, this should
+     *    be covered by the point above anyways, but check to be safe)
+     *  - Have a size of 0 (stuff in crtstuff.c that was compiled with
+     *    -finhibit-size-directive has a size of 0, thus we can't instrument)
+     *  - Have a size less than 2 (superset of above point). Instrumentation
+     *    requires inserting at least two int3 instructions, each of which is
+     *    one byte.
+     */
+    if (!elf_sec_contains_sym(text_shdr, sym) ||
+        sym->st_value == 0 ||
+        sym->st_size < 2) {
+      verbose("skipping instrumentation of function %s\n",
+              elf_get_sym_name(elf_start, sym, strtab));
+      continue;
+    }
 
-    instrument_func(elf_start, sym);
+    verbose("instrumenting function %s\n",
+        elf_get_sym_name(elf_start, sym, strtab));
+
+    if (instrument_func(elf_start, sym) == -1) {
+      fprintf(stderr, "error instrumenting function %s\n",
+              elf_get_sym_name(elf_start, sym, strtab));
+    }
   }
 
   return 0;
 }
 
 static void apply_outer_encryption(void *packed_bin_start, void *loader_start,
-                                   size_t loader_size, size_t packed_bin_size,
-                                   struct key_info *key_info) {
+    size_t loader_size, size_t packed_bin_size,
+    struct key_info *key_info) {
   struct rc4_state rc4;
   rc4_init(&rc4, key_info->key, sizeof(key_info->key));
 

@@ -1,6 +1,8 @@
 #ifndef KITESHIELD_ELFUTILS_H
 #define KITESHIELD_ELFUTILS_H
 
+/* General ELF utility functions */
+
 #include <elf.h>
 #include <stddef.h>
 
@@ -16,5 +18,6 @@ const Elf64_Shdr *elf_get_sec_by_name(void *elf_start, const char *name);
 uint8_t *elf_get_sym(void *elf_start, const Elf64_Sym *sym);
 const char *elf_get_sym_name(void *elf_start, const Elf64_Sym *sym,
                              const Elf64_Shdr *strtab);
+int elf_sec_contains_sym(const Elf64_Shdr *sec, const Elf64_Sym *sym);
 
 #endif /* KITESHIELD_ELFUTILS_H */

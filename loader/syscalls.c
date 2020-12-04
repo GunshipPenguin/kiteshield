@@ -1,4 +1,5 @@
-#include "loader/include/arch_typedefs.h"
+#include "loader/include/types.h"
+#include "loader/include/syscall_defines.h"
 
 ssize_t write(int fd, const char *s, size_t count) {
   ssize_t bytes_written;
@@ -109,4 +110,8 @@ int mprotect(void *addr, size_t len, int prot) {
   return ret;
 }
 
+long ptrace (enum __ptrace_request request, pid_t pid, void *addr,
+             void *data) {
+
+}
 

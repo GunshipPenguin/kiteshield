@@ -1,13 +1,15 @@
 .PHONY: loader packer
 
-all: loader packer
+all: packer
 
-debug: loader_debug packer_debug
+debug: packer_debug
 
-packer:
+# The packer requires the headerized loader, thus the loader is a dependency of
+# the packer
+packer: loader
 	$(MAKE) -C packer
 
-packer_debug:
+packer_debug: loader_debug
 	$(MAKE) debug -C packer
 
 loader:

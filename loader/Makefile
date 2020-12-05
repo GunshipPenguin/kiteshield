@@ -29,4 +29,5 @@ obj/%.o: %.S
 
 clean:
 	rm -rf obj/
+	rm -f loader_stub.h
 

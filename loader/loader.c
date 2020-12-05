@@ -10,8 +10,6 @@
 #include "loader/include/elf_auxv.h"
 #include "loader/include/syscalls.h"
 
-/* Base address to copy the application to before launching */
-#define ENCRYPTED_APP_LOAD_ADDR 0x800000000ULL
 #define INTERP_LOAD_ADDR 0xB00000000ULL
 
 #define PAGE_SHIFT 12
@@ -250,8 +248,9 @@ void *load(void *entry_stacktop) {
              (void *) (ENCRYPTED_APP_LOAD_ADDR + packed_bin_ehdr->e_phoff),
              interp_base, packed_bin_ehdr->e_phnum);
 
-  DEBUG("finished mapping binary into memory, preparing to fork");
-  DEBUG_FMT("control will be passed to ld.so at %p", interp_entry);
+  DEBUG("finished mapping binary into memory");
+  DEBUG_FMT("preparing to fork and pass control in child to ld.so at %p",
+            interp_entry);
 
   return interp_entry;
 }

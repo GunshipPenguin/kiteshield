@@ -17,5 +17,8 @@ SECTIONS
   .data : {
     *(.data)
   }
+  .bs_info : {
+    *runtime.o(.bs_info)
+  }
 }
 

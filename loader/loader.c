@@ -233,10 +233,14 @@ void *load(void *entry_stacktop) {
    */
   Elf64_Ehdr *packed_bin_ehdr = (Elf64_Ehdr *) (packed_bin_phdr->p_vaddr);
 
+  /* The first ELF segment (loader code) includes the ehdr and two phdrs,
+   * adjust loader code start and size accordingly */
+  size_t hdr_adjust = sizeof(Elf64_Ehdr) + (2 * sizeof(Elf64_Phdr));
+
   decrypt_packed_bin((void *) packed_bin_phdr->p_vaddr,
                      packed_bin_phdr->p_memsz,
-                     (void *) loader_phdr->p_vaddr + sizeof(Elf64_Ehdr) + (2*sizeof(Elf64_Phdr)),
-                     loader_phdr->p_memsz);
+                     (void *) loader_phdr->p_vaddr + hdr_adjust,
+                     loader_phdr->p_memsz - hdr_adjust);
 
   void *interp_entry;
   void *interp_base;
@@ -251,3 +255,4 @@ void *load(void *entry_stacktop) {
 
   return interp_entry;
 }
+

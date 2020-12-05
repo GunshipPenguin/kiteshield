@@ -110,14 +110,17 @@ static int produce_output_elf(FILE *output_file, void *input_elf,
 
   CK_NEQ_PERROR(fwrite(&ehdr, sizeof(ehdr), 1, output_file), 0);
 
+  /* Size of the first segment include the size of the ehdr and two phdrs */
+  size_t hdrs_size = sizeof(Elf64_Ehdr) + (2 * sizeof(Elf64_Phdr));
+
   /* Program header for stub */
   Elf64_Phdr stub_phdr;
   stub_phdr.p_type = PT_LOAD;
   stub_phdr.p_offset = 0;
   stub_phdr.p_vaddr = KITESHIELD_STUB_BASE;
   stub_phdr.p_paddr = stub_phdr.p_vaddr;
-  stub_phdr.p_filesz = sizeof(loader_x86_64);
-  stub_phdr.p_memsz = sizeof(loader_x86_64);
+  stub_phdr.p_filesz = sizeof(loader_x86_64) + hdrs_size;
+  stub_phdr.p_memsz = sizeof(loader_x86_64) + hdrs_size;
   stub_phdr.p_flags = PF_R | PF_X;
   stub_phdr.p_align = 0x200000;
   CK_NEQ_PERROR(fwrite(&stub_phdr, sizeof(stub_phdr), 1, output_file), 0);

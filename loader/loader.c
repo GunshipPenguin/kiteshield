@@ -22,7 +22,8 @@
 
 struct key_info key_info __attribute__((section(".key_info")));
 
-static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
+static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
+{
   /* Same rounding logic as in map_load_section_from_fd, see comment below.
    * Note that we don't need a separate mmap here for bss if memsz > filesz
    * as we map an anonymous region and copy into it rather than mapping from
@@ -53,7 +54,8 @@ static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr) {
   return addr;
 }
 
-static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
+static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
+{
   int prot = 0;
   if (phdr.p_flags & PF_R)
     prot |= PROT_READ;
@@ -98,7 +100,8 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr) {
   return addr;
 }
 
-static void map_interp(void *path, void **entry, void **interp_base) {
+static void map_interp(void *path, void **entry, void **interp_base)
+{
   DEBUG_FMT("mapping INTERP ELF at path %s", path);
   int interp_fd = open(path, O_RDONLY, 0);
   DIE_IF(interp_fd == -1, "could not open interpreter binary");
@@ -135,8 +138,11 @@ static void map_interp(void *path, void **entry, void **interp_base) {
   }
 }
 
-static void map_elf_from_mem(void *elf_start, void **interp_entry,
-                             void **interp_base) {
+static void map_elf_from_mem(
+    void *elf_start,
+    void **interp_entry,
+    void **interp_base)
+{
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
 
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
@@ -156,7 +162,8 @@ static void map_elf_from_mem(void *elf_start, void **interp_entry,
 
 static void replace_auxv_ent(unsigned long long *auxv_start,
                              unsigned long long label,
-                             unsigned long long value) {
+                             unsigned long long value)
+{
   unsigned long long *curr_ent = auxv_start;
   while (*curr_ent != label && *curr_ent != AT_NULL) curr_ent += 2;
   DIE_IF_FMT(*curr_ent == AT_NULL, "could not find auxv entry %d", label);
@@ -166,8 +173,13 @@ static void replace_auxv_ent(unsigned long long *auxv_start,
             value);
 }
 
-static void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
-                       void *interp_base, unsigned long long phnum) {
+static void setup_auxv(
+    void *argv_start,
+    void *entry,
+    void *phdr_addr,
+    void *interp_base,
+    unsigned long long phnum)
+{
   unsigned long long *auxv_start = argv_start;
 
 #define ADVANCE_PAST_NEXT_NULL(ptr) \
@@ -185,8 +197,12 @@ static void setup_auxv(void *argv_start, void *entry, void *phdr_addr,
   replace_auxv_ent(auxv_start, AT_PHNUM, phnum);
 }
 
-static void decrypt_packed_bin(void *packed_bin_start, size_t packed_bin_size,
-                               void *loader_start, size_t loader_size) {
+static void decrypt_packed_bin(
+    void *packed_bin_start,
+    size_t packed_bin_size,
+    void *loader_start,
+    size_t loader_size)
+{
   struct key_info actual_key;
   obf_deobf_key(&key_info, &actual_key, loader_start, loader_size);
 
@@ -211,7 +227,8 @@ static void decrypt_packed_bin(void *packed_bin_start, size_t packed_bin_size,
 }
 
 /* Load the packed binary, returns the address to hand control to when done */
-void *load(void *entry_stacktop) {
+void *load(void *entry_stacktop)
+{
   /* As per the SVr4 ABI */
   /* int argc = (int) *((unsigned long long *) entry_stacktop); */
   char **argv = ((char **) entry_stacktop) + 1;

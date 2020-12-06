@@ -11,8 +11,12 @@
  * obfuscate the key in the loader code and then deobfuscate the key in the
  * loader code.
  */
-void obf_deobf_key(struct key_info *old_ki, struct key_info *new_ki,
-                   unsigned char *loader_bin, unsigned int loader_bin_size) {
+void obf_deobf_key(
+    struct key_info *old_ki,
+    struct key_info *new_ki,
+    unsigned char *loader_bin,
+    unsigned int loader_bin_size)
+{
   __builtin_memcpy(new_ki, old_ki, sizeof(*old_ki));
 
   /* First XOR every byte of the key with a constant */

@@ -1,7 +1,8 @@
 #include "loader/include/types.h"
 #include "loader/include/syscall_defines.h"
 
-ssize_t write(int fd, const char *s, size_t count) {
+ssize_t write(int fd, const char *s, size_t count)
+{
   ssize_t bytes_written;
 
   asm("mov $1, %%rax\n"
@@ -16,7 +17,8 @@ ssize_t write(int fd, const char *s, size_t count) {
   return bytes_written;
 }
 
-ssize_t read(int fd, void *buf, size_t count) {
+ssize_t read(int fd, void *buf, size_t count)
+{
   ssize_t bytes_read;
 
   asm("mov $0, %%rax\n"
@@ -31,7 +33,8 @@ ssize_t read(int fd, void *buf, size_t count) {
   return bytes_read;
 }
 
-off_t lseek(int fd, off_t offset, int whence) {
+off_t lseek(int fd, off_t offset, int whence)
+{
   off_t ret_offset;
 
   asm("mov $8, %%rax\n"
@@ -46,7 +49,8 @@ off_t lseek(int fd, off_t offset, int whence) {
   return ret_offset;
 }
 
-int open(const char *pathname, int flags, int mode) {
+int open(const char *pathname, int flags, int mode)
+{
   int fd = -1;
 
   asm("mov $2, %%rax\n"
@@ -61,7 +65,8 @@ int open(const char *pathname, int flags, int mode) {
   return fd;
 }
 
-void exit(int status) {
+void exit(int status)
+{
   asm("mov $60, %%rax\n"
       "mov %0, %%rdi\n"
       "syscall"
@@ -69,7 +74,8 @@ void exit(int status) {
   :   "rm" (status));
 }
 
-void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
   void *ret = (void *) -1;
 
   asm("mov $9, %%rax\n"
@@ -88,7 +94,8 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
   return ret;
 }
 
-int mprotect(void *addr, size_t len, int prot) {
+int mprotect(void *addr, size_t len, int prot)
+{
   int ret = -1;
 
   asm("movq $10, %%rax\n"
@@ -103,8 +110,12 @@ int mprotect(void *addr, size_t len, int prot) {
   return ret;
 }
 
-long ptrace(enum __ptrace_request request, pid_t pid, void *addr,
-             void *data) {
+long ptrace(
+    enum __ptrace_request request,
+    pid_t pid,
+    void *addr,
+    void *data)
+{
   long ret = -1;
 
   asm("movq $101, %%rax\n"
@@ -120,7 +131,8 @@ long ptrace(enum __ptrace_request request, pid_t pid, void *addr,
   return ret;
 }
 
-pid_t wait(int *wstatus) {
+pid_t wait(int *wstatus)
+{
   pid_t ret = -1;
 
   /* The glibc wait actually wraps the wait4 syscall, which takes 4 arguments

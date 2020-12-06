@@ -36,17 +36,24 @@
 static int log_verbose = 0;
 
 /* Needs to be defined for bddisasm */
-int nd_vsnprintf_s(char *buffer, size_t sizeOfBuffer, size_t count,
-                   const char *format, va_list argptr) {
+int nd_vsnprintf_s(
+    char *buffer,
+    size_t sizeOfBuffer,
+    size_t count,
+    const char *format,
+    va_list argptr)
+{
   return vsnprintf(buffer, sizeOfBuffer, format, argptr);
 }
 
 /* Needs to be defined for bddisasm */
-void* nd_memset(void *s, int c, size_t n)  {
+void* nd_memset(void *s, int c, size_t n)
+{
   return memset(s, c, n);
 }
 
-static void verbose(char *fmt, ...) {
+static void verbose(char *fmt, ...)
+{
   if (!log_verbose)
     return;
 
@@ -56,7 +63,8 @@ static void verbose(char *fmt, ...) {
   vprintf(fmt, args);
 }
 
-static int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
+static int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size)
+{
   FILE *file;
   CK_NEQ_PERROR(file = fopen(path, "r"), NULL);
   CK_NEQ_PERROR(fseek(file, 0L, SEEK_END), -1);
@@ -72,11 +80,13 @@ static int read_input_elf(char *path, void **buf_ptr, size_t *elf_buf_size) {
   return 0;
 }
 
-static int produce_output_elf(FILE *output_file,
-                              void *input_elf,
-                              size_t input_elf_size,
-                              void *loader,
-                              size_t loader_size) {
+static int produce_output_elf(
+    FILE *output_file,
+    void *input_elf,
+    size_t input_elf_size,
+    void *loader,
+    size_t loader_size)
+{
   /* The entry address is located right after the struct key_info (used for
    * passing decryption key and other info to loader), which is the first
    * sizeof(struct key_info) bytes of the loader code (guaranteed by the linker
@@ -151,8 +161,11 @@ static int produce_output_elf(FILE *output_file,
   return 0;
 }
 
-static int instrument_func(void *elf_start, Elf64_Sym *func_sym,
-                           struct byte_sub_info *bs_info) {
+static int instrument_func(
+    void *elf_start,
+    Elf64_Sym *func_sym,
+    struct byte_sub_info *bs_info)
+{
   uint8_t *code = elf_get_sym(elf_start, func_sym);
 
   uint8_t *code_ptr = code;
@@ -194,9 +207,12 @@ static int instrument_func(void *elf_start, Elf64_Sym *func_sym,
   return 0;
 }
 
-static int apply_inner_encryption(void *elf_start, size_t elf_size,
-                                  struct key_info *key_info,
-                                  struct byte_sub_info **bs_info) {
+static int apply_inner_encryption(
+    void *elf_start,
+    size_t elf_size,
+    struct key_info *key_info,
+    struct byte_sub_info **bs_info)
+{
   verbose("attempting to apply inner encryption (per-function encryption)\n");
   const Elf64_Ehdr *ehdr = elf_start;
 
@@ -257,9 +273,13 @@ static int apply_inner_encryption(void *elf_start, size_t elf_size,
   return 0;
 }
 
-static int apply_outer_encryption(void *packed_bin_start, void *loader_start,
-    size_t loader_size, size_t packed_bin_size,
-    struct key_info *key_info) {
+static int apply_outer_encryption(
+    void *packed_bin_start,
+    void *loader_start,
+    size_t loader_size,
+    size_t packed_bin_size,
+    struct key_info *key_info)
+{
   struct rc4_state rc4;
   rc4_init(&rc4, key_info->key, sizeof(key_info->key));
 
@@ -283,7 +303,8 @@ static int apply_outer_encryption(void *packed_bin_start, void *loader_start,
   return 0;
 }
 
-static void *inject_bs_info(struct byte_sub_info *bs_info, size_t *new_size) {
+static void *inject_bs_info(struct byte_sub_info *bs_info, size_t *new_size)
+{
   size_t bs_info_size = sizeof(struct byte_sub_info) +
                     sizeof(struct byte_sub) * bs_info->num;
   void *loader_bs_info = malloc(sizeof(loader_x86_64) + bs_info_size);
@@ -303,7 +324,8 @@ static void *inject_bs_info(struct byte_sub_info *bs_info, size_t *new_size) {
   return loader_bs_info;
 }
 
-static void usage() {
+static void usage()
+{
   printf(
       "Kiteshield, an obfuscating packer for x86-64 binaries on Linux\n"
       "Usage: kiteshield [OPTION] INPUT_FILE OUTPUT_FILE\n\n"
@@ -312,7 +334,8 @@ static void usage() {
   );
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   char *input_bin, *output_bin;
   int use_inner_encryption = 1;
   int c;

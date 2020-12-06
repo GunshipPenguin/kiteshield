@@ -7,7 +7,8 @@
 
 ssize_t write(int fd, const char *s, size_t count);
 
-static char *strncpy(char *dest, const char *src, size_t n) {
+static char *strncpy(char *dest, const char *src, size_t n)
+{
   size_t i;
 
   for (i = 0; i < n && src[i] != '\0'; i++) {
@@ -21,8 +22,13 @@ static char *strncpy(char *dest, const char *src, size_t n) {
   return dest;
 }
 
-void itoa(unsigned long long val, int is_signed, char *buf, int bitwidth,
-          int radix) {
+void itoa(
+    unsigned long long val,
+    int is_signed,
+    char *buf,
+    int bitwidth,
+    int radix)
+{
   char *digits = "0123456789abcdef";
   char *buf_ptr = buf;
 
@@ -49,7 +55,8 @@ void itoa(unsigned long long val, int is_signed, char *buf, int bitwidth,
   }
 }
 
-size_t strnlen(const char *s, size_t maxlen) {
+size_t strnlen(const char *s, size_t maxlen)
+{
   int len = 0;
   while (*(s + len) != '\0' && len <= maxlen) {
     len++;
@@ -75,7 +82,8 @@ size_t strnlen(const char *s, size_t maxlen) {
  *   - %x -- unsigned hexadecimal integer -- sizeof(int)
  *   - %s -- null-terminated string
  */
-void minimal_printf(int fd, const char *format, ...) {
+void minimal_printf(int fd, const char *format, ...)
+{
   va_list vl;
   va_start(vl, format);
 

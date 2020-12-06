@@ -2,7 +2,8 @@
 
 #include "packer/include/elfutils.h"
 
-const char *elf_get_sec_name(void *elf_start, const Elf64_Shdr *shdr) {
+const char *elf_get_sec_name(void *elf_start, const Elf64_Shdr *shdr)
+{
   Elf64_Ehdr *ehdr = elf_start;
   Elf64_Shdr *shstrtab =
     ((Elf64_Shdr *) (elf_start + ehdr->e_shoff)) + ehdr->e_shstrndx;
@@ -10,7 +11,8 @@ const char *elf_get_sec_name(void *elf_start, const Elf64_Shdr *shdr) {
   return (const char *) (elf_start + shstrtab->sh_offset + shdr->sh_name);
 }
 
-const Elf64_Shdr *elf_get_sec_by_name(void *elf_start, const char *name) {
+const Elf64_Shdr *elf_get_sec_by_name(void *elf_start, const char *name)
+{
   Elf64_Ehdr *ehdr = elf_start;
   Elf64_Shdr *curr_shdr = elf_start + ehdr->e_shoff;
 
@@ -25,7 +27,8 @@ const Elf64_Shdr *elf_get_sec_by_name(void *elf_start, const char *name) {
   return NULL;
 }
 
-uint8_t *elf_get_sym(void *elf_start, const Elf64_Sym *sym) {
+uint8_t *elf_get_sym(void *elf_start, const Elf64_Sym *sym)
+{
   Elf64_Ehdr *ehdr = elf_start;
   Elf64_Phdr *first_phdr = (Elf64_Phdr *) (elf_start + ehdr->e_phoff);
 
@@ -45,13 +48,17 @@ uint8_t *elf_get_sym(void *elf_start, const Elf64_Sym *sym) {
   return NULL;
 }
 
-int elf_sec_contains_sym(const Elf64_Shdr *shdr, const Elf64_Sym *sym) {
+int elf_sec_contains_sym(const Elf64_Shdr *shdr, const Elf64_Sym *sym)
+{
   return shdr->sh_addr <= sym->st_value &&
          (shdr->sh_addr + shdr->sh_size) > sym->st_value;
 }
 
-const char *elf_get_sym_name(void *elf_start, const Elf64_Sym *sym,
-                             const Elf64_Shdr *strtab) {
+const char *elf_get_sym_name(
+    void *elf_start,
+    const Elf64_Sym *sym,
+    const Elf64_Shdr *strtab)
+{
   return (const char *) (elf_start + strtab->sh_offset + sym->st_name);
 }
 

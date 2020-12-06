@@ -8,7 +8,8 @@
 struct byte_sub_info bs_info __attribute__((section(".bs_info")));
 
 
-void runtime_start() {
+void runtime_start()
+{
   DEBUG("starting ptrace runtime");
   DEBUG_FMT("number of bs_info entries: %u", bs_info.num);
 
@@ -28,7 +29,8 @@ void runtime_start() {
 
 /* Called into by the child to setup ptrace just before handing off control
  * to the packed binary */
-long child_setup_ptrace() {
+long child_setup_ptrace()
+{
   long ret = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
   DIE_IF(ret == -1, "child: ptrace(PTRACE_TRACEME) failed");
 

@@ -10,8 +10,6 @@
 #include "loader/include/elf_auxv.h"
 #include "loader/include/syscalls.h"
 
-#define INTERP_LOAD_ADDR 0xB00000000ULL
-
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 #define PAGE_MASK (~0 << PAGE_SHIFT)
@@ -30,7 +28,7 @@ static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
    * an fd (ie. we can just not touch the remaining space and it will be full
    * of zeros by default).
    */
-  void *addr = mmap((void *) (ENCRYPTED_APP_LOAD_ADDR +
+  void *addr = mmap((void *) (UNPACKED_BIN_LOAD_ADDR +
                               PAGE_ALIGN_DOWN(phdr.p_vaddr)),
                     phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -234,11 +232,11 @@ void *load(void *entry_stacktop)
   char **argv = ((char **) entry_stacktop) + 1;
 
   /* "our" EHDR (ie. the one in the on-disk binary that was run) */
-  Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) KITESHIELD_STUB_BASE;
+  Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) LOADER_ADDR;
 
   /* The PHDR in our binary corresponding to the loader (ie. this code) */
   Elf64_Phdr *loader_phdr = (Elf64_Phdr *)
-                            (KITESHIELD_STUB_BASE + us_ehdr->e_phoff);
+                            (LOADER_ADDR + us_ehdr->e_phoff);
 
   /* The PHDR in our binary corresponding to the encrypted app */
   Elf64_Phdr *packed_bin_phdr = loader_phdr + 1;
@@ -261,8 +259,8 @@ void *load(void *entry_stacktop)
   void *interp_base;
   map_elf_from_mem(packed_bin_ehdr, &interp_entry, &interp_base);
   setup_auxv(argv,
-             (void *) (ENCRYPTED_APP_LOAD_ADDR + packed_bin_ehdr->e_entry),
-             (void *) (ENCRYPTED_APP_LOAD_ADDR + packed_bin_ehdr->e_phoff),
+             (void *) (UNPACKED_BIN_LOAD_ADDR + packed_bin_ehdr->e_entry),
+             (void *) (UNPACKED_BIN_LOAD_ADDR + packed_bin_ehdr->e_phoff),
              interp_base, packed_bin_ehdr->e_phnum);
 
   DEBUG("finished mapping binary into memory");

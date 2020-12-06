@@ -4,11 +4,19 @@
 
 #include <stdint.h>
 
-/* Base address to copy the application to before launching */
-#define ENCRYPTED_APP_LOAD_ADDR 0x800000000ULL
+/* Address at which the loader is initially loaded by the kernel on exec (ie.
+ * the p_vaddr field in the binary) */
+#define LOADER_ADDR 0x400000ULL
 
-/* Virtual address at which the stub loader is placed */
-#define KITESHIELD_STUB_BASE 0x400000ULL
+/* Address at which the packed binary is initially loaded by the kernel on
+ * exec (ie. the p_vaddr field in the binary) */
+#define PACKED_BIN_ADDR 0xA00000ULL
+
+/* Base address the loader will copy the packed binary to before launching */
+#define UNPACKED_BIN_LOAD_ADDR 0x800000000ULL
+
+/* Base address at which the loader code will load ld.so */
+#define INTERP_LOAD_ADDR 0xB00000000ULL
 
 /* This struct is stored at a predefined offset in the loader code, allowing
  * the packer to copy the RC4 decryption key over the loader. */
@@ -16,7 +24,6 @@
 struct key_info {
   unsigned char key[KEY_SIZE];
 } __attribute__((packed));
-
 
 /* "byte substitution information", ie. information on bytes we had to remove
  * from the original program code to inject single byte int3 instructions for

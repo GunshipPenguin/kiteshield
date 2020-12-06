@@ -19,12 +19,6 @@
 
 #include "loader/loader_stub.h"
 
-/* Virtual address at which the twice encrypted ELF is to be
- * initially loaded by the kernel (this is the p_vaddr field).
- * The loader will then copy it to another address, peel off
- * the first layer of encryption, and run it. */
-#define APP_VADDR 0xA00000ULL
-
 #define CK_NEQ_PERROR(stmt, err)                                              \
   do {                                                                        \
     if ((stmt) == err) {                                                      \
@@ -91,7 +85,7 @@ static int produce_output_elf(
    * passing decryption key and other info to loader), which is the first
    * sizeof(struct key_info) bytes of the loader code (guaranteed by the linker
    * script) */
-  Elf64_Addr entry_vaddr = KITESHIELD_STUB_BASE +
+  Elf64_Addr entry_vaddr = LOADER_ADDR +
                            sizeof(Elf64_Ehdr) +
                            (sizeof(Elf64_Phdr) * 2) +
                            sizeof(struct key_info);
@@ -130,7 +124,7 @@ static int produce_output_elf(
   Elf64_Phdr stub_phdr;
   stub_phdr.p_type = PT_LOAD;
   stub_phdr.p_offset = 0;
-  stub_phdr.p_vaddr = KITESHIELD_STUB_BASE;
+  stub_phdr.p_vaddr = LOADER_ADDR;
   stub_phdr.p_paddr = stub_phdr.p_vaddr;
   stub_phdr.p_filesz = loader_size + hdrs_size;
   stub_phdr.p_memsz = loader_size + hdrs_size;
@@ -143,7 +137,7 @@ static int produce_output_elf(
   Elf64_Phdr app_phdr;
   app_phdr.p_type = PT_LOAD;
   app_phdr.p_offset = app_offset;
-  app_phdr.p_vaddr = APP_VADDR + app_offset; /* Keep vaddr aligned */
+  app_phdr.p_vaddr = PACKED_BIN_ADDR + app_offset; /* Keep vaddr aligned */
   app_phdr.p_paddr = app_phdr.p_vaddr;
   app_phdr.p_filesz = input_elf_size;
   app_phdr.p_memsz = input_elf_size;
@@ -183,7 +177,7 @@ static int instrument_func(
         ix.PrimaryOpCode == 0xC2 || ix.PrimaryOpCode == 0xCA) {
       size_t off = (size_t) ((void *) code_ptr - elf_start);
       void *addr = (void *)
-                   (ENCRYPTED_APP_LOAD_ADDR + func_sym->st_value + off);
+                   (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value + off);
       verbose("instrumenting ret instruction at vaddr %p, offset %u\n",
               addr, off);
 

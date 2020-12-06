@@ -1,11 +1,11 @@
 #ifdef DEBUG_OUTPUT
 
 #include "loader/include/types.h"
+#include "loader/include/syscalls.h"
 #include "loader/include/debug.h"
 
 #define BITS(type) (sizeof(type) * 8)
 
-ssize_t write(int fd, const char *s, size_t count);
 
 static char *strncpy(char *dest, const char *src, size_t n)
 {

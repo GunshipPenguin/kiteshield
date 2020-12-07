@@ -116,19 +116,19 @@ long ptrace(
     void *addr,
     void *data)
 {
-  long ret = -1;
+  long res = 0;
 
   asm("movq $101, %%rax\n"
       "movl %1, %%edi\n"
       "movq %2, %%rsi\n"
-      "movl %3, %%edx\n"
+      "movq %3, %%rdx\n"
       "movq %4, %%r10\n"
       "syscall\n"
       "movq %%rax, %0\n"
-  :   "+rm" (ret)
+  :   "+rm" (res)
   :   "rm" (request), "rm" (pid), "rm" (addr), "rm" (data));
 
-  return ret;
+  return res;
 }
 
 pid_t wait(int *wstatus)

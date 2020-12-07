@@ -175,10 +175,10 @@ static int instrument_func(
     /* Ret opcodes */
     if (ix.PrimaryOpCode == 0xC3 || ix.PrimaryOpCode == 0xCB ||
         ix.PrimaryOpCode == 0xC2 || ix.PrimaryOpCode == 0xCA) {
-      size_t off = (size_t) ((void *) code_ptr - elf_start);
+      size_t off = (size_t) (code_ptr - code);
       void *addr = (void *)
                    (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value + off);
-      verbose("instrumenting ret instruction at vaddr %p, offset %u\n",
+      verbose("instrumenting ret instruction at vaddr %p, offset in func %u\n",
               addr, off);
 
       bs_info->subs[bs_info->num].addr = addr;
@@ -193,7 +193,8 @@ static int instrument_func(
   }
 
   /* Instrument entry point */
-  bs_info->subs[bs_info->num].addr = (void *) func_sym->st_value;
+  bs_info->subs[bs_info->num].addr = (void *) UNPACKED_BIN_LOAD_ADDR +
+                                              func_sym->st_value;
   bs_info->subs[bs_info->num].value = code[0];
   bs_info->num++;
   code[0] = 0xCC;

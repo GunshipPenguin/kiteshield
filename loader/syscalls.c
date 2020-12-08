@@ -1,9 +1,9 @@
+#include "loader/include/syscalls.h"
 #include "loader/include/types.h"
-#include "loader/include/syscall_defines.h"
 
-ssize_t write(int fd, const char *s, size_t count)
+ssize_t sys_write(int fd, const char *s, size_t count)
 {
-  ssize_t bytes_written;
+  ssize_t ret = 0;
 
   asm("mov $1, %%rax\n"
       "mov %1, %%edi\n"
@@ -11,15 +11,15 @@ ssize_t write(int fd, const char *s, size_t count)
       "mov %3, %%edx\n"
       "syscall\n"
       "mov %%rax, %0"
-  :   "=rm" (bytes_written)
+  :   "=rm" (ret)
   :   "rm" (fd), "rm" (s), "rm" (count));
 
-  return bytes_written;
+  return ret;
 }
 
-ssize_t read(int fd, void *buf, size_t count)
+ssize_t sys_read(int fd, void *buf, size_t count)
 {
-  ssize_t bytes_read;
+  ssize_t ret = 0;
 
   asm("mov $0, %%rax\n"
       "mov %1, %%rdi\n"
@@ -27,15 +27,15 @@ ssize_t read(int fd, void *buf, size_t count)
       "mov %3, %%edx\n"
       "syscall\n"
       "mov %%rax, %0"
-  :   "=rm" (bytes_read)
+  :   "=rm" (ret)
   :   "rm" (fd), "rm" (buf), "rm" (count));
 
-  return bytes_read;
+  return ret;
 }
 
-off_t lseek(int fd, off_t offset, int whence)
+off_t sys_lseek(int fd, off_t offset, int whence)
 {
-  off_t ret_offset;
+  off_t ret = 0;
 
   asm("mov $8, %%rax\n"
       "mov %0, %%rdi\n"
@@ -43,15 +43,15 @@ off_t lseek(int fd, off_t offset, int whence)
       "mov %2, %%edx\n"
       "syscall\n"
       "mov %%rax, %3"
-  :   "=rm" (ret_offset)
+  :   "=rm" (ret)
   :   "rm" (fd), "rm" (offset), "rm" (whence));
 
-  return ret_offset;
+  return ret;
 }
 
-int open(const char *pathname, int flags, int mode)
+int sys_open(const char *pathname, int flags, int mode)
 {
-  int fd = -1;
+  int ret = 0;
 
   asm("mov $2, %%rax\n"
       "movq %1, %%rdi\n"
@@ -59,13 +59,13 @@ int open(const char *pathname, int flags, int mode)
       "mov %3, %%rdx\n"
       "syscall\n"
       "mov %%eax, %0"
-  :   "+rm" (fd)
+  :   "+rm" (ret)
   :   "rm" (pathname), "rm" (flags), "rm" (mode));
 
-  return fd;
+  return ret;
 }
 
-void exit(int status)
+void sys_exit(int status)
 {
   asm("mov $60, %%rax\n"
       "mov %0, %%rdi\n"
@@ -74,9 +74,15 @@ void exit(int status)
   :   "rm" (status));
 }
 
-void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+void *sys_mmap(
+    void *addr,
+    size_t length,
+    int prot,
+    int flags,
+    int fd,
+    off_t offset)
 {
-  void *ret = (void *) -1;
+  void *ret = NULL;
 
   asm("mov $9, %%rax\n"
       "mov %1, %%rdi\n"
@@ -94,9 +100,9 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
   return ret;
 }
 
-int mprotect(void *addr, size_t len, int prot)
+int sys_mprotect(void *addr, size_t len, int prot)
 {
-  int ret = -1;
+  int ret = 0;
 
   asm("movq $10, %%rax\n"
       "movq %1, %%rdi\n"
@@ -110,14 +116,20 @@ int mprotect(void *addr, size_t len, int prot)
   return ret;
 }
 
-long ptrace(
+long sys_ptrace(
     enum __ptrace_request request,
     pid_t pid,
     void *addr,
     void *data)
 {
-  long res = 0;
+  long ret = 0;
 
+  /* Note that the raw kernel-level ptrace interface differs from the one
+   * exposed by glibc with regards to the PTRACE_PEEK requests. Glibc *returns*
+   * the data, while the kernel-level interface stores it in *data.
+   *
+   * This function exposes the kernel-level interface.
+   */
   asm("movq $101, %%rax\n"
       "movl %1, %%edi\n"
       "movq %2, %%rsi\n"
@@ -125,19 +137,18 @@ long ptrace(
       "movq %4, %%r10\n"
       "syscall\n"
       "movq %%rax, %0\n"
-  :   "+rm" (res)
+  :   "+rm" (ret)
   :   "rm" (request), "rm" (pid), "rm" (addr), "rm" (data));
 
-  return res;
+  return ret;
 }
 
-pid_t wait(int *wstatus)
+pid_t sys_wait4(int *wstatus)
 {
-  pid_t ret = -1;
+  pid_t ret = 0;
 
-  /* The glibc wait actually wraps the wait4 syscall, which takes 4 arguments
-   * we pass in NULL/-1 as needed for those args to get the same behaviour
-   * as the glibc wrapper */
+  /* We pass NULL for the pid/options/rusage arguments to simpify the function
+   * definition (we don't currently have a need for these arguments) */
   asm("movq $61, %%rax\n"
       "movq $-1, %%rdi\n"
       "movq %1, %%rsi\n"

@@ -23,13 +23,13 @@
 #define DIE(msg)                                                              \
   do {                                                                        \
     minimal_printf(2, KITESHIELD_PREFIX msg "\n");                            \
-    exit(1);                                                                  \
+    sys_exit(1);                                                              \
   } while (0)
 #else
 #define DIE(msg)                                                              \
   do {                                                                        \
     if (cond) {                                                               \
-      exit(0);                                                                \
+      sys_exit(0);                                                            \
     }                                                                         \
   } while (0)
 #endif
@@ -38,12 +38,12 @@
 #define DIE_FMT(msg, ...)                                                     \
   do {                                                                        \
     minimal_printf(2, KITESHIELD_PREFIX msg "\n", __VA_ARGS__);               \
-    exit(1);                                                                  \
+    sys_exit(1);                                                              \
   } while (0)
 #else
 #define DIE_FMT(msg, ...)                                                     \
   do {                                                                        \
-    exit(0);                                                                  \
+    sys_exit(0);                                                              \
   } while (0)
 #endif
 
@@ -52,14 +52,14 @@
   do {                                                                        \
     if (cond) {                                                               \
       minimal_printf(2, KITESHIELD_PREFIX msg "\n");                          \
-      exit(1);                                                                \
+      sys_exit(1);                                                            \
     }                                                                         \
   } while (0)
 #else
 #define DIE_IF(cond, msg)                                                     \
   do {                                                                        \
     if (cond) {                                                               \
-      exit(0);                                                                \
+      sys_exit(0);                                                            \
     }                                                                         \
   } while (0)
 #endif
@@ -69,14 +69,14 @@
   do {                                                                        \
     if (cond) {                                                               \
       minimal_printf(2, KITESHIELD_PREFIX msg "\n", __VA_ARGS__);             \
-      exit(1);                                                                \
+      sys_exit(1);                                                            \
     }                                                                         \
   } while (0)
 #else
 #define DIE_IF_FMT(cond, msg, ...)                                            \
   do {                                                                        \
     if (cond) {                                                               \
-      exit(0);                                                                \
+      sys_exit(0);                                                            \
     }                                                                         \
   } while (0)
 #endif

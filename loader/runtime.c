@@ -1,6 +1,5 @@
 #include "common/include/defs.h"
 
-#include "loader/include/syscall_defines.h"
 #include "loader/include/types.h"
 #include "loader/include/debug.h"
 #include "loader/include/syscalls.h"
@@ -16,7 +15,9 @@ void runtime_start()
 #ifdef DEBUG_OUTPUT
   for (int i = 0; i < bs_info.num; i++) {
     struct byte_sub bs = bs_info.subs[i];
-    DEBUG_FMT("bs_info entry %u: value = %hhx, addr = %p", i, bs.value, bs.addr);
+    DEBUG_FMT(
+        "bs_info entry %u: value = %hhx, addr = %p",
+        i, bs.value, bs.addr);
   }
 #endif
 
@@ -24,8 +25,8 @@ void runtime_start()
     int wstatus;
     long res;
     struct user_regs_struct regs;
-    pid_t pid = wait(&wstatus);
-    DIE_IF(pid == -1, "wait syscall failed");
+    pid_t pid = sys_wait4(&wstatus);
+    DIE_IF(pid == -1, "wait4 syscall failed");
 
     if (WIFEXITED(wstatus)) {
       DEBUG_FMT("child exited with status %u", WEXITSTATUS(wstatus));
@@ -37,22 +38,24 @@ void runtime_start()
       return;
     }
 
-    res = ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+    res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
     DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
 
     if (WSTOPSIG(wstatus) != SIGTRAP) {
-      DEBUG_FMT("child was stopped by signal %u at pc = %p, exiting", WSTOPSIG(wstatus), regs.ip);
+      DEBUG_FMT(
+          "child was stopped by signal %u at pc = %p, exiting",
+          WSTOPSIG(wstatus), regs.ip);
       return;
     }
 
     DEBUG_FMT("child hit instrumentation point at %p", regs.ip - 1);
 
     regs.ip--;
-    res = ptrace(PTRACE_SETREGS, pid, NULL, &regs);
+    res = sys_ptrace(PTRACE_SETREGS, pid, NULL, &regs);
     DIE_IF_FMT(res < 0, "PTRACE_SETREGS failed with error %d", res);
 
     long word;
-    res = ptrace(PTRACE_PEEKTEXT, pid, (void *) regs.ip, &word);
+    res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) regs.ip, &word);
     DIE_IF_FMT(res != 0, "PTRACE_PEEKTEXT failed with error %d", res);
 
     uint8_t sub_value;
@@ -73,10 +76,10 @@ void runtime_start()
     word &= (~0) << 8;
     word |= sub_value;
 
-    res = ptrace(PTRACE_POKETEXT, pid, (void *) regs.ip, (void *) word);
+    res = sys_ptrace(PTRACE_POKETEXT, pid, (void *) regs.ip, (void *) word);
     DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
 
-    res = ptrace(PTRACE_CONT, pid, NULL, NULL);
+    res = sys_ptrace(PTRACE_CONT, pid, NULL, NULL);
     DIE_IF_FMT(res < 0, "PTRACE_CONT failed with error %d", res);
   }
 }
@@ -85,10 +88,10 @@ void runtime_start()
  * to the packed binary */
 long child_setup_ptrace()
 {
-  long ret = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-  DIE_IF(ret == -1, "child: ptrace(PTRACE_TRACEME) failed");
+  long ret = sys_ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+  DIE_IF(ret == -1, "child: sys_ptrace(PTRACE_TRACEME) failed");
 
-  DEBUG("child: ptrace(PTRACE_TRACEME) was successful");
+  DEBUG("child: sys_ptrace(PTRACE_TRACEME) was successful");
   DEBUG("child: handing control to packed binary");
   return ret;
 }

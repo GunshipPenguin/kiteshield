@@ -4,7 +4,6 @@
 #include "common/include/rc4.h"
 #include "common/include/key_utils.h"
 
-#include "loader/include/syscall_defines.h"
 #include "loader/include/types.h"
 #include "loader/include/debug.h"
 #include "loader/include/elf_auxv.h"
@@ -28,8 +27,8 @@ static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
    * an fd (ie. we can just not touch the remaining space and it will be full
    * of zeros by default).
    */
-  void *addr = mmap((void *) (UNPACKED_BIN_LOAD_ADDR +
-                              PAGE_ALIGN_DOWN(phdr.p_vaddr)),
+  void *addr = sys_mmap((void *) (UNPACKED_BIN_LOAD_ADDR +
+                                  PAGE_ALIGN_DOWN(phdr.p_vaddr)),
                     phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   DIE_IF(addr == MAP_FAILED, "mmap failure");
@@ -47,8 +46,9 @@ static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
   int prot = (phdr.p_flags & PF_R ? PROT_READ : 0)  |
              (phdr.p_flags & PF_W ? PROT_WRITE : 0) |
              (phdr.p_flags & PF_X ? PROT_EXEC : 0);
-  DIE_IF(mprotect(addr, phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr), prot) < 0,
-         "mprotect error");
+  DIE_IF(
+      sys_mprotect(addr, phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr), prot) < 0,
+      "mprotect error");
   return addr;
 }
 
@@ -75,21 +75,22 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
    * (as per the ELF standard), this will result in them both being rounded
    * down by the same amount, and the produced mapping will be correct.
    */
-  void *addr = mmap((void *) (INTERP_LOAD_ADDR +
-                              PAGE_ALIGN_DOWN(phdr.p_vaddr)),
-                    phdr.p_filesz + PAGE_OFFSET(phdr.p_vaddr),
-                    prot, MAP_PRIVATE | MAP_FIXED,
-                    fd,
-                    PAGE_ALIGN_DOWN(phdr.p_offset));
+  void *addr = sys_mmap((void *) (INTERP_LOAD_ADDR +
+                                  PAGE_ALIGN_DOWN(phdr.p_vaddr)),
+                        phdr.p_filesz + PAGE_OFFSET(phdr.p_vaddr),
+                        prot, MAP_PRIVATE | MAP_FIXED,
+                        fd,
+                        PAGE_ALIGN_DOWN(phdr.p_offset));
   DIE_IF(addr == MAP_FAILED,
          "mmap failure while mapping load section from fd");
 
   /* If p_memsz > p_filesz, the remaining space must be filled with zeros
    * (Usually the .bss section), map extra anon pages if this is the case. */
   if (phdr.p_memsz > phdr.p_filesz) {
-    void *extra_space = mmap(addr + PAGE_ALIGN_UP(phdr.p_filesz),
-                             phdr.p_memsz - phdr.p_filesz, prot,
-                             MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    void *extra_space = sys_mmap(addr + PAGE_ALIGN_UP(phdr.p_filesz),
+                                 phdr.p_memsz - phdr.p_filesz, prot,
+                                 MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS,
+                                 -1, 0);
     DIE_IF(extra_space == MAP_FAILED,
            "mmap failure while mapping extra space for static vars");
   }
@@ -101,11 +102,11 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
 static void map_interp(void *path, void **entry, void **interp_base)
 {
   DEBUG_FMT("mapping INTERP ELF at path %s", path);
-  int interp_fd = open(path, O_RDONLY, 0);
+  int interp_fd = sys_open(path, O_RDONLY, 0);
   DIE_IF(interp_fd == -1, "could not open interpreter binary");
 
   Elf64_Ehdr ehdr;
-  DIE_IF(read(interp_fd, &ehdr, sizeof(ehdr)) < 0,
+  DIE_IF(sys_read(interp_fd, &ehdr, sizeof(ehdr)) < 0,
          "read failure while reading interpreter binary header");
   *entry = ((void *) INTERP_LOAD_ADDR + ehdr.e_entry);
 
@@ -113,11 +114,12 @@ static void map_interp(void *path, void **entry, void **interp_base)
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;
 
-    off_t lseek_res = lseek(interp_fd, ehdr.e_phoff + i * sizeof(Elf64_Phdr),
-                            SEEK_SET);
+    off_t lseek_res = sys_lseek(interp_fd,
+                                ehdr.e_phoff + i * sizeof(Elf64_Phdr),
+                                SEEK_SET);
     DIE_IF(lseek_res < 0, "lseek failure while mapping interpreter");
 
-    size_t read_res = read(interp_fd, &curr_phdr, sizeof(curr_phdr));
+    size_t read_res = sys_read(interp_fd, &curr_phdr, sizeof(curr_phdr));
     DIE_IF(read_res < 0, "read failure while mapping interpreter");
 
     /* We shouldn't be dealing with any non PT_LOAD segments here */

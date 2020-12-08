@@ -164,7 +164,7 @@ copy:
     msg_ptr += strnlen(item_buf, sizeof(item_buf));
   }
 
-  write(fd, msg_buf, strnlen(msg_buf, sizeof(msg_buf)));
+  sys_write(fd, msg_buf, strnlen(msg_buf, sizeof(msg_buf)));
   va_end(vl);
 }
 

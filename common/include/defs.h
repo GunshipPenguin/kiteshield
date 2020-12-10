@@ -34,6 +34,9 @@ struct key_info {
 struct byte_sub {
   void *addr;
   uint8_t value;
+  void *func_start;
+  void *func_end;
+  int is_ret : 1;
 } __attribute__((packed));
 
 struct byte_sub_info {

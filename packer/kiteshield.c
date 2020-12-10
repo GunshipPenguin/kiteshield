@@ -160,10 +160,10 @@ static int instrument_func(
     Elf64_Sym *func_sym,
     struct byte_sub_info *bs_info)
 {
-  uint8_t *code = elf_get_sym(elf_start, func_sym);
+  uint8_t *func_start = elf_get_sym(elf_start, func_sym);
 
-  uint8_t *code_ptr = code;
-  while (code_ptr < code + func_sym->st_size) {
+  uint8_t *code_ptr = func_start;
+  while (code_ptr < func_start + func_sym->st_size) {
     INSTRUX ix;
     NDSTATUS status = NdDecode(&ix, code_ptr, ND_CODE_64, ND_DATA_64);
 
@@ -175,15 +175,18 @@ static int instrument_func(
     /* Ret opcodes */
     if (ix.PrimaryOpCode == 0xC3 || ix.PrimaryOpCode == 0xCB ||
         ix.PrimaryOpCode == 0xC2 || ix.PrimaryOpCode == 0xCA) {
-      size_t off = (size_t) (code_ptr - code);
+      size_t off = (size_t) (code_ptr - func_start);
       void *addr = (void *)
                    (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value + off);
       verbose("instrumenting ret instruction at vaddr %p, offset in func %u\n",
               addr, off);
 
-      bs_info->subs[bs_info->num].addr = addr;
-      bs_info->subs[bs_info->num].value = *code_ptr;
-      bs_info->num++;
+      struct byte_sub *bs = &bs_info->subs[bs_info->num++];
+      bs->addr = addr;
+      bs->value = *code_ptr;
+      bs->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+      bs->func_end = bs->func_start + func_sym->st_size;
+      bs->is_ret = 1;
 
       /* 0xCC = int3 */
       *code_ptr = (uint8_t) 0xCC;
@@ -193,11 +196,13 @@ static int instrument_func(
   }
 
   /* Instrument entry point */
-  bs_info->subs[bs_info->num].addr = (void *) UNPACKED_BIN_LOAD_ADDR +
-                                              func_sym->st_value;
-  bs_info->subs[bs_info->num].value = code[0];
-  bs_info->num++;
-  code[0] = 0xCC;
+  struct byte_sub *bs = &bs_info->subs[bs_info->num++];
+  bs->addr = (void *) UNPACKED_BIN_LOAD_ADDR + func_sym->st_value;
+  bs->value = *func_start;
+  bs->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+  bs->func_end = bs->func_start + func_sym->st_size;
+  bs->is_ret = 0;
+  *func_start = 0xCC;
 
   return 0;
 }

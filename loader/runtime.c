@@ -5,7 +5,7 @@
 #include "loader/include/syscalls.h"
 #include "loader/include/signal.h"
 
-struct byte_sub_info bs_info __attribute__((section(".bs_info")));
+struct trap_point_info tp_info __attribute__((section(".tp_info")));
 
 void handle_trap(pid_t pid, int wstatus)
 {
@@ -18,7 +18,7 @@ void handle_trap(pid_t pid, int wstatus)
              "child was stopped by signal %u at pc = %p, exiting",
              WSTOPSIG(wstatus), regs.ip);
 
-  DEBUG_FMT("child hit instrumentation point at %p", regs.ip - 1);
+  DEBUG_FMT("child trapped at %p", regs.ip - 1);
 
   regs.ip--;
   res = sys_ptrace(PTRACE_SETREGS, pid, NULL, &regs);
@@ -28,22 +28,19 @@ void handle_trap(pid_t pid, int wstatus)
   res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) regs.ip, &word);
   DIE_IF_FMT(res != 0, "PTRACE_PEEKTEXT failed with error %d", res);
 
-  struct byte_sub *bs;
+  struct trap_point *tp;
   int i = 0;
-  for (; i < bs_info.num; i++) {
-    if (bs_info.subs[i].addr == (void *) regs.ip) {
-      bs = &bs_info.subs[i];
+  for (; i < tp_info.num; i++) {
+    if (tp_info.arr[i].addr == (void *) regs.ip) {
+      tp = &tp_info.arr[i];
       break;
     }
   }
 
-  DIE_IF_FMT(i == bs_info.num,
+  DIE_IF_FMT(i == tp_info.num,
              "could not find byte sub at %p, exiting", regs.ip);
-
-  DEBUG_FMT("function starting %p and ending %p", bs->func_start, bs->func_end);
-  DEBUG_FMT("substituting byte %hhx at address %p", bs->value, regs.ip);
   word &= (~0) << 8;
-  word |= bs->value;
+  word |= tp->value;
 
   res = sys_ptrace(PTRACE_POKETEXT, pid, (void *) regs.ip, (void *) word);
   DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
@@ -55,14 +52,14 @@ void handle_trap(pid_t pid, int wstatus)
 void runtime_start()
 {
   DEBUG("starting ptrace runtime");
-  DEBUG_FMT("number of bs_info entries: %u", bs_info.num);
+  DEBUG_FMT("number of tp_info entries: %u", tp_info.num);
 
 #ifdef DEBUG_OUTPUT
-  for (int i = 0; i < bs_info.num; i++) {
-    struct byte_sub bs = bs_info.subs[i];
+  for (int i = 0; i < tp_info.num; i++) {
+    struct trap_point tp = tp_info.arr[i];
     DEBUG_FMT(
-        "bs_info entry %u: value = %hhx, addr = %p",
-        i, bs.value, bs.addr);
+        "tp_info entry %u: value = %hhx, addr = %p",
+        i, tp.value, tp.addr);
   }
 #endif
 
@@ -92,7 +89,7 @@ long child_setup_ptrace()
   long ret = sys_ptrace(PTRACE_TRACEME, 0, NULL, NULL);
   DIE_IF(ret == -1, "child: sys_ptrace(PTRACE_TRACEME) failed");
 
-  DEBUG("child: sys_ptrace(PTRACE_TRACEME) was successful");
+  DEBUG("child: PTRACE_TRACEME was successful");
   DEBUG("child: handing control to packed binary");
   return ret;
 }

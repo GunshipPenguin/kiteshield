@@ -158,7 +158,7 @@ static int produce_output_elf(
 static int instrument_func(
     void *elf_start,
     Elf64_Sym *func_sym,
-    struct byte_sub_info *bs_info)
+    struct trap_point_info *tp_info)
 {
   uint8_t *func_start = elf_get_sym(elf_start, func_sym);
 
@@ -181,7 +181,7 @@ static int instrument_func(
       verbose("instrumenting ret instruction at vaddr %p, offset in func %u\n",
               addr, off);
 
-      struct byte_sub *bs = &bs_info->subs[bs_info->num++];
+      struct trap_point *bs = &tp_info->arr[tp_info->num++];
       bs->addr = addr;
       bs->value = *code_ptr;
       bs->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
@@ -196,7 +196,7 @@ static int instrument_func(
   }
 
   /* Instrument entry point */
-  struct byte_sub *bs = &bs_info->subs[bs_info->num++];
+  struct trap_point *bs = &tp_info->arr[tp_info->num++];
   bs->addr = (void *) UNPACKED_BIN_LOAD_ADDR + func_sym->st_value;
   bs->value = *func_start;
   bs->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
@@ -211,7 +211,7 @@ static int apply_inner_encryption(
     void *elf_start,
     size_t elf_size,
     struct key_info *key_info,
-    struct byte_sub_info **bs_info)
+    struct trap_point_info **tp_info)
 {
   verbose("attempting to apply inner encryption (per-function encryption)\n");
   const Elf64_Ehdr *ehdr = elf_start;
@@ -234,8 +234,8 @@ static int apply_inner_encryption(
     return -1;
   }
 
-  *bs_info = malloc(4096);
-  (*bs_info)->num = 0;
+  *tp_info = malloc(4096);
+  *tp_info->num = 0;
   ELF_FOR_EACH_SYMBOL(elf_start, sym) {
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
@@ -264,7 +264,7 @@ static int apply_inner_encryption(
     verbose("instrumenting function %s\n",
         elf_get_sym_name(elf_start, sym, strtab));
 
-    if (instrument_func(elf_start, sym, *bs_info) == -1) {
+    if (instrument_func(elf_start, sym, *tp_info) == -1) {
       fprintf(stderr, "error instrumenting function %s\n",
               elf_get_sym_name(elf_start, sym, strtab));
     }
@@ -303,25 +303,25 @@ static int apply_outer_encryption(
   return 0;
 }
 
-static void *inject_bs_info(struct byte_sub_info *bs_info, size_t *new_size)
+static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
 {
-  size_t bs_info_size = sizeof(struct byte_sub_info) +
-                    sizeof(struct byte_sub) * bs_info->num;
-  void *loader_bs_info = malloc(sizeof(loader_x86_64) + bs_info_size);
+  size_t tp_info_size = sizeof(struct trap_point_info) +
+                    sizeof(struct trap_point) * tp_info->num;
+  void *loader_tp_info = malloc(sizeof(loader_x86_64) + tp_info_size);
 
-  memcpy(loader_bs_info, loader_x86_64, sizeof(loader_x86_64));
+  memcpy(loader_tp_info, loader_x86_64, sizeof(loader_x86_64));
 
-  /* subtract sizeof(struct byte_sub_info) here to ensure we overwrite the non
+  /* subtract sizeof(struct trap_point_info) here to ensure we overwrite the non
    * flexible-array portion of the struct that the linker actually puts in the
    * code. */
-  memcpy(loader_bs_info + sizeof(loader_x86_64) - sizeof(struct byte_sub_info),
-         bs_info, bs_info_size);
+  memcpy(loader_tp_info + sizeof(loader_x86_64) - sizeof(struct trap_point_info),
+         tp_info, tp_info_size);
 
-  *new_size = sizeof(loader_x86_64) + bs_info_size;
+  *new_size = sizeof(loader_x86_64) + tp_info_size;
   verbose(
       "Injected byte sub info into loader old size: %u new size: %u\n",
       sizeof(loader_x86_64), *new_size);
-  return loader_bs_info;
+  return loader_tp_info;
 }
 
 static void usage()
@@ -383,22 +383,22 @@ int main(int argc, char *argv[])
   verbose("for RC4 encryption\n");
 
   /* Apply inner encryption if requested */
-  size_t loader_bs_info_size = sizeof(loader_x86_64);
-  void *loader_bs_info = loader_x86_64;
+  size_t loader_tp_info_size = sizeof(loader_x86_64);
+  void *loader_tp_info = loader_x86_64;
   if (use_inner_encryption) {
-    struct byte_sub_info *bs_info = NULL;
-    ret = apply_inner_encryption(elf_buf, elf_buf_size, &key_info, &bs_info);
+    struct trap_point_info *tp_info = NULL;
+    ret = apply_inner_encryption(elf_buf, elf_buf_size, &key_info, &tp_info);
     if (ret == -1) {
       fprintf(stderr, "could not apply inner encryption\n");
       return -1;
     }
 
     /* Inject byte sub info into loader */
-    loader_bs_info = inject_bs_info(bs_info, &loader_bs_info_size);
+    loader_tp_info = inject_tp_info(tp_info, &loader_tp_info_size);
   }
 
   /* Apply outer encryption */
-  ret = apply_outer_encryption(elf_buf, loader_bs_info, loader_bs_info_size,
+  ret = apply_outer_encryption(elf_buf, loader_tp_info, loader_tp_info_size,
                                elf_buf_size, &key_info);
   if (ret == -1) {
     fprintf(stderr, "could not apply outer encryption");
@@ -409,7 +409,7 @@ int main(int argc, char *argv[])
   FILE *output_elf;
   CK_NEQ_PERROR(output_elf = fopen(output_bin, "w"), NULL);
   ret = produce_output_elf(output_elf, elf_buf, elf_buf_size,
-                           loader_bs_info, loader_bs_info_size);
+                           loader_tp_info, loader_tp_info_size);
   if (ret == -1) {
     fprintf(stderr, "could not produce output ELF\n");
     return -1;

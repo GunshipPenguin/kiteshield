@@ -25,23 +25,33 @@ struct key_info {
   unsigned char key[KEY_SIZE];
 } __attribute__((packed));
 
-/* "byte substitution information", ie. information on bytes we had to remove
- * from the original program code to inject single byte int3 instructions for
- * function instrumentation. We store a single byte_sub_info struct at the end
- * of the loader code so the runtime has access to this info. This allows for
- * the original instruction to be executed at runtime.
+/* Represents a point in code at which we injected a single byte int3
+ * instruction so that the program will trap into the ptrace runtime to decrypt
+ * or encrypt the current function when entering or returning from it
+ * respectively. We store a single trap_point_info struct at the end of the
+ * loader code so the runtime has access to this info.
  */
-struct byte_sub {
+struct trap_point {
+  /* Address in program code of this trap point */
   void *addr;
+
+  /* Byte that was overwritten by the int3, needed so we can overwrite and
+   * execute the original instruction */
   uint8_t value;
+
+  /* Start and end address of function to encrypt/decrypt */
   void *func_start;
   void *func_end;
+
+  /* 1 if this is a ret instruction, 0 if this trap point marks the start of a
+   * function (so the runtime knows whether to encrypt or decrypt respectively)
+   */
   int is_ret : 1;
 } __attribute__((packed));
 
-struct byte_sub_info {
+struct trap_point_info {
   int num;
-  struct byte_sub subs[];
+  struct trap_point arr[];
 } __attribute__((packed));
 
 #endif /* __KITESHIELD_DEFS_H */

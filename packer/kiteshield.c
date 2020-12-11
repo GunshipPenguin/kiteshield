@@ -235,7 +235,7 @@ static int apply_inner_encryption(
   }
 
   *tp_info = malloc(4096);
-  *tp_info->num = 0;
+  (*tp_info)->num = 0;
   ELF_FOR_EACH_SYMBOL(elf_start, sym) {
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;

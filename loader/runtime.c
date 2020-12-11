@@ -7,6 +7,44 @@
 
 struct trap_point_info tp_info __attribute__((section(".tp_info")));
 
+void overwrite_int3(pid_t pid, void *addr)
+{
+  long word;
+  long res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) addr, &word);
+  DIE_IF_FMT(res != 0, "PTRACE_PEEKTEXT failed with error %d", res);
+
+  struct trap_point *tp;
+  int i = 0;
+  for (; i < tp_info.num; i++) {
+    if (tp_info.arr[i].addr == addr) {
+      tp = &tp_info.arr[i];
+      break;
+    }
+  }
+
+  DIE_IF_FMT(i == tp_info.num,
+             "could not find byte sub at %p, exiting", addr);
+  word &= (~0) << 8;
+  word |= tp->value;
+
+  res = sys_ptrace(PTRACE_POKETEXT, pid, addr, (void *) word);
+  DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
+}
+
+void single_step(pid_t pid)
+{
+  long res = sys_ptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
+  DIE_IF_FMT(res < 0, "PTRACE_SINGLESTEP failed with error %d", res);
+  int wstatus;
+  sys_wait4(&wstatus);
+
+  DIE_IF_FMT(WIFEXITED(wstatus),
+             "child exited with status %u during single step",
+             WEXITSTATUS(wstatus));
+  DIE_IF(!WIFSTOPPED(wstatus) || WSTOPSIG(wstatus) != SIGTRAP,
+         "child was stopped unexpectedly during single step, exiting");
+}
+
 void handle_trap(pid_t pid, int wstatus)
 {
   long res;
@@ -24,26 +62,8 @@ void handle_trap(pid_t pid, int wstatus)
   res = sys_ptrace(PTRACE_SETREGS, pid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_SETREGS failed with error %d", res);
 
-  long word;
-  res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) regs.ip, &word);
-  DIE_IF_FMT(res != 0, "PTRACE_PEEKTEXT failed with error %d", res);
-
-  struct trap_point *tp;
-  int i = 0;
-  for (; i < tp_info.num; i++) {
-    if (tp_info.arr[i].addr == (void *) regs.ip) {
-      tp = &tp_info.arr[i];
-      break;
-    }
-  }
-
-  DIE_IF_FMT(i == tp_info.num,
-             "could not find byte sub at %p, exiting", regs.ip);
-  word &= (~0) << 8;
-  word |= tp->value;
-
-  res = sys_ptrace(PTRACE_POKETEXT, pid, (void *) regs.ip, (void *) word);
-  DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
+  overwrite_int3(pid, (void *) regs.ip);
+  single_step(pid);
 
   res = sys_ptrace(PTRACE_CONT, pid, NULL, NULL);
   DIE_IF_FMT(res < 0, "PTRACE_CONT failed with error %d", res);
@@ -66,17 +86,12 @@ void runtime_start()
   while (1) {
     int wstatus;
     pid_t pid = sys_wait4(&wstatus);
+
     DIE_IF(pid == -1, "wait4 syscall failed");
-
-    if (WIFEXITED(wstatus)) {
-      DEBUG_FMT("child exited with status %u", WEXITSTATUS(wstatus));
-      return;
-    }
-
-    if (!WIFSTOPPED(wstatus)) {
-      DEBUG("child was stopped unexpectedly, exiting");
-      return;
-    }
+    DIE_IF_FMT(WIFEXITED(wstatus),
+               "child exited with status %u", WEXITSTATUS(wstatus));
+    DIE_IF(!WIFSTOPPED(wstatus) || WSTOPSIG(wstatus) != SIGTRAP,
+           "child was stopped unexpectedly, exiting");
 
     handle_trap(pid, wstatus);
   }

@@ -7,12 +7,7 @@
 
 struct trap_point_info tp_info __attribute__((section(".tp_info")));
 
-void overwrite_int3(pid_t pid, void *addr)
-{
-  long word;
-  long res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) addr, &word);
-  DIE_IF_FMT(res != 0, "PTRACE_PEEKTEXT failed with error %d", res);
-
+struct trap_point *get_tp(void *addr) {
   struct trap_point *tp;
   int i = 0;
   for (; i < tp_info.num; i++) {
@@ -23,9 +18,18 @@ void overwrite_int3(pid_t pid, void *addr)
   }
 
   DIE_IF_FMT(i == tp_info.num,
-             "could not find byte sub at %p, exiting", addr);
+             "could not find trap point at %p, exiting", addr);
+  return tp;
+}
+
+void set_byte_at_addr(pid_t pid, void *addr, uint8_t value)
+{
+  long word;
+  long res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) addr, &word);
+  DIE_IF_FMT(res != 0, "PTRACE_PEEKTEXT failed with error %d", res);
+
   word &= (~0) << 8;
-  word |= tp->value;
+  word |= value;
 
   res = sys_ptrace(PTRACE_POKETEXT, pid, addr, (void *) word);
   DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
@@ -58,12 +62,19 @@ void handle_trap(pid_t pid, int wstatus)
 
   DEBUG_FMT("child trapped at %p", regs.ip - 1);
 
+  /* Back up the instruction pointer, replace the int3 byte with the original
+   * program code, single step through the original instruction and replace
+   * the int3 */
   regs.ip--;
   res = sys_ptrace(PTRACE_SETREGS, pid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_SETREGS failed with error %d", res);
 
-  overwrite_int3(pid, (void *) regs.ip);
+  struct trap_point *tp = get_tp((void *) regs.ip);
+  set_byte_at_addr(pid, (void *) regs.ip, tp->value);
+
   single_step(pid);
+
+  set_byte_at_addr(pid, (void *) regs.ip, 0xCC);
 
   res = sys_ptrace(PTRACE_CONT, pid, NULL, NULL);
   DIE_IF_FMT(res < 0, "PTRACE_CONT failed with error %d", res);

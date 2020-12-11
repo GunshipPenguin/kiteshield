@@ -17,7 +17,7 @@
 #include "common/include/defs.h"
 #include "packer/include/elfutils.h"
 
-#include "loader/loader_stub.h"
+#include "loader/out/loader_header.h"
 
 #define CK_NEQ_PERROR(stmt, err)                                              \
   do {                                                                        \
@@ -120,17 +120,17 @@ static int produce_output_elf(
   /* Size of the first segment include the size of the ehdr and two phdrs */
   size_t hdrs_size = sizeof(Elf64_Ehdr) + (2 * sizeof(Elf64_Phdr));
 
-  /* Program header for stub */
-  Elf64_Phdr stub_phdr;
-  stub_phdr.p_type = PT_LOAD;
-  stub_phdr.p_offset = 0;
-  stub_phdr.p_vaddr = LOADER_ADDR;
-  stub_phdr.p_paddr = stub_phdr.p_vaddr;
-  stub_phdr.p_filesz = loader_size + hdrs_size;
-  stub_phdr.p_memsz = loader_size + hdrs_size;
-  stub_phdr.p_flags = PF_R | PF_X;
-  stub_phdr.p_align = 0x200000;
-  CK_NEQ_PERROR(fwrite(&stub_phdr, sizeof(stub_phdr), 1, output_file), 0);
+  /* Program header for loader */
+  Elf64_Phdr loader_phdr;
+  loader_phdr.p_type = PT_LOAD;
+  loader_phdr.p_offset = 0;
+  loader_phdr.p_vaddr = LOADER_ADDR;
+  loader_phdr.p_paddr = loader_phdr.p_vaddr;
+  loader_phdr.p_filesz = loader_size + hdrs_size;
+  loader_phdr.p_memsz = loader_size + hdrs_size;
+  loader_phdr.p_flags = PF_R | PF_X;
+  loader_phdr.p_align = 0x200000;
+  CK_NEQ_PERROR(fwrite(&loader_phdr, sizeof(loader_phdr), 1, output_file), 0);
 
   /* Program header for packed application */
   int app_offset = ftell(output_file) + sizeof(Elf64_Phdr) + loader_size;
@@ -145,7 +145,7 @@ static int produce_output_elf(
   app_phdr.p_align =  0x200000;
   CK_NEQ_PERROR(fwrite(&app_phdr, sizeof(app_phdr), 1, output_file), 0);
 
-  /* Stub loader contents */
+  /* Loader code/data */
   CK_NEQ_PERROR(
       fwrite(loader, loader_size, 1, output_file), 0);
 

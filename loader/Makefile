@@ -1,33 +1,32 @@
 CFLAGS = -Wall -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
 
 SRCS = $(wildcard *.[c,S] ../common/*.c)
-OBJS = $(addprefix obj/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
+OBJS = $(addprefix out/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
 
 .PHONY: all output_dirs debug clean
 
 debug: CFLAGS += -DDEBUG_OUTPUT
 
-all: output_dirs loader_stub.h
+all: output_dirs out/loader_header.h
 
 debug: all
 
 output_dirs:
-	mkdir -p obj
+	mkdir -p out
 
-loader_stub.h: $(OBJS)
-	$(LD) $(OBJS) -T link.lds -o obj/loader.bin
-	cat obj/loader.bin | python3 bin_to_header.py loader_x86_64 > loader_stub.h
+out/loader_header.h: $(OBJS)
+	$(LD) $(OBJS) -T link.lds -o out/loader.bin
+	cat out/loader.bin | python3 bin_to_header.py loader_x86_64 > out/loader_header.h
 
-obj/%.o: %.c
+out/%.o: %.c
 	$(CC) $(CFLAGS) $< -o $@
 
-obj/%.o: ../common/%.c
+out/%.o: ../common/%.c
 	$(CC) $(CFLAGS) $< -o $@
 
-obj/%.o: %.S
+out/%.o: %.S
 	$(AS) $< -o $@
 
 clean:
-	rm -rf obj/
-	rm -f loader_stub.h
+	rm -rf out/
 

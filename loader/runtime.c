@@ -10,7 +10,7 @@
 struct trap_point_info tp_info __attribute__((section(".tp_info")));
 
 /* Defined in loader.c */
-extern struct key_info obfuscated_key;
+extern struct rc4_key obfuscated_key;
 
 struct trap_point *get_tp(void *addr) {
   struct trap_point *tp;
@@ -61,10 +61,10 @@ void single_step(pid_t pid)
 void encrypt_decrypt_func(
     pid_t pid,
     struct trap_point *trap_point,
-    struct key_info *key_info)
+    struct rc4_key *key)
 {
   struct rc4_state rc4;
-  rc4_init(&rc4, key_info->key, sizeof(key_info->key));
+  rc4_init(&rc4, key->bytes, sizeof(key->bytes));
 
   uint8_t *curr_addr = trap_point->func_start;
   size_t remaining = trap_point->func_end - trap_point->func_start;
@@ -86,7 +86,7 @@ void encrypt_decrypt_func(
   }
 }
 
-void handle_trap(pid_t pid, int wstatus, struct key_info *key_info)
+void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 {
   long res;
   struct user_regs_struct regs;
@@ -111,12 +111,12 @@ void handle_trap(pid_t pid, int wstatus, struct key_info *key_info)
               tp->func_start, tp->addr);
     set_byte_at_addr(pid, (void *) regs.ip, tp->value);
     single_step(pid);
-    encrypt_decrypt_func(pid, tp, key_info);
+    encrypt_decrypt_func(pid, tp, key);
     set_byte_at_addr(pid, tp->func_start, 0xCC);
   } else {
     DEBUG_FMT("entering function at %p, decrypting",
               tp->func_start, tp->func_end);
-    encrypt_decrypt_func(pid, tp, key_info);
+    encrypt_decrypt_func(pid, tp, key);
     set_byte_at_addr(pid, (void *) regs.ip, tp->value);
     single_step(pid);
   }
@@ -130,7 +130,7 @@ void runtime_start()
   DEBUG("starting ptrace runtime");
   DEBUG_FMT("number of tp_info entries: %u", tp_info.num);
 
-  struct key_info actual_key;
+  struct rc4_key actual_key;
   loader_key_deobfuscate(&obfuscated_key, &actual_key);
 
 #ifdef DEBUG_OUTPUT

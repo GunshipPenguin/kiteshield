@@ -12,30 +12,30 @@
  * loader code.
  */
 void obf_deobf_key(
-    struct key_info *old_ki,
-    struct key_info *new_ki,
+    struct rc4_key *old_key,
+    struct rc4_key *new_key,
     unsigned char *loader_bin,
     unsigned int loader_bin_size)
 {
-  __builtin_memcpy(new_ki, old_ki, sizeof(*old_ki));
+  __builtin_memcpy(new_key, old_key, sizeof(*old_key));
 
   /* First XOR every byte of the key with a constant */
-  for (int i = 0; i < sizeof(new_ki->key); i++)
-    new_ki->key[i] ^= 0x55;
+  for (int i = 0; i < sizeof(new_key->bytes); i++)
+    new_key->bytes[i] ^= 0x55;
 
   /* Now we XOR the loader_index'th byte of the key with the loader_index'th
    * byte of the loader code where key_index starts at 0 and increments by 3
    * and loader_index starts at 0 and incremets by 22 until the end of the
    * loader code. */
 
-  /* Skip the key_info struct of course, we just want the code */
-  unsigned int loader_index = sizeof(struct key_info);
+  /* Skip the struct rc4_key of course, we just want the code */
+  unsigned int loader_index = sizeof(struct rc4_key);
   unsigned int key_index = 0;
   while (loader_index < loader_bin_size) {
-    new_ki->key[key_index] ^= *((unsigned char *) loader_bin + loader_index);
+    new_key->bytes[key_index] ^= *((unsigned char *) loader_bin + loader_index);
 
     loader_index += 22;
-    key_index = (key_index + 3) % sizeof(new_ki->key);
+    key_index = (key_index + 3) % sizeof(new_key->bytes);
   }
 }
 

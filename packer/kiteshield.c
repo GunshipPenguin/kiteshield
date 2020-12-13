@@ -81,14 +81,14 @@ static int produce_output_elf(
     void *loader,
     size_t loader_size)
 {
-  /* The entry address is located right after the struct key_info (used for
+  /* The entry address is located right after the struct rc4_key (used for
    * passing decryption key and other info to loader), which is the first
-   * sizeof(struct key_info) bytes of the loader code (guaranteed by the linker
+   * sizeof(struct rc4_key) bytes of the loader code (guaranteed by the linker
    * script) */
   Elf64_Addr entry_vaddr = LOADER_ADDR +
                            sizeof(Elf64_Ehdr) +
                            (sizeof(Elf64_Phdr) * 2) +
-                           sizeof(struct key_info);
+                           sizeof(struct rc4_key);
   Elf64_Ehdr ehdr;
   ehdr.e_ident[EI_MAG0] = ELFMAG0;
   ehdr.e_ident[EI_MAG1] = ELFMAG1;
@@ -155,10 +155,10 @@ static int produce_output_elf(
   return 0;
 }
 
-static void encrypt_memory_range(struct key_info *ki, void *start, size_t len)
+static void encrypt_memory_range(struct rc4_key *key, void *start, size_t len)
 {
   struct rc4_state rc4;
-  rc4_init(&rc4, ki->key, sizeof(ki->key));
+  rc4_init(&rc4, key->bytes, sizeof(key->bytes));
 
   uint8_t *curr = start;
   for (size_t i = 0; i < len; i++) {
@@ -171,7 +171,7 @@ static int process_func(
     void *elf_start,
     Elf64_Sym *func_sym,
     struct trap_point_info *tp_info,
-    struct key_info *key_info)
+    struct rc4_key *key)
 {
   uint8_t *func_start = elf_get_sym(elf_start, func_sym);
 
@@ -216,7 +216,7 @@ static int process_func(
   tp->is_ret = 0;
 
   verbose("encrypting function at %p, len %u\n", func_sym->st_value, func_sym->st_size);
-  encrypt_memory_range(key_info, func_start, func_sym->st_size);
+  encrypt_memory_range(key, func_start, func_sym->st_size);
 
   /* Instrument entry point */
   *func_start = 0xCC;
@@ -227,7 +227,7 @@ static int process_func(
 static int apply_inner_encryption(
     void *elf_start,
     size_t elf_size,
-    struct key_info *key_info,
+    struct rc4_key *key,
     struct trap_point_info **tp_info)
 {
   verbose("attempting to apply inner encryption (per-function encryption)\n");
@@ -281,7 +281,7 @@ static int apply_inner_encryption(
     verbose("instrumenting function %s\n",
         elf_get_sym_name(elf_start, sym, strtab));
 
-    if (process_func(elf_start, sym, *tp_info, key_info) == -1) {
+    if (process_func(elf_start, sym, *tp_info, key) == -1) {
       fprintf(stderr, "error instrumenting function %s\n",
               elf_get_sym_name(elf_start, sym, strtab));
     }
@@ -295,19 +295,19 @@ static int apply_outer_encryption(
     void *loader_start,
     size_t loader_size,
     size_t packed_bin_size,
-    struct key_info *key_info)
+    struct rc4_key *key)
 {
   verbose("attempting to apply outer encryption (whole-binary encryption)\n");
 
   /* Encrypt the actual binary */
-  encrypt_memory_range(key_info, packed_bin_start, packed_bin_size);
+  encrypt_memory_range(key, packed_bin_start, packed_bin_size);
 
   /* Obfuscate Key */
-  struct key_info obfuscated_key;
-  obf_deobf_key(key_info, &obfuscated_key, loader_start, loader_size);
+  struct rc4_key obfuscated_key;
+  obf_deobf_key(key, &obfuscated_key, loader_start, loader_size);
 
   /* Copy over obfuscated key so the loader can decrypt */
-  *((struct key_info *) loader_start) = obfuscated_key;
+  *((struct rc4_key *) loader_start) = obfuscated_key;
 
   return 0;
 }
@@ -383,11 +383,11 @@ int main(int argc, char *argv[])
   }
 
   /* Generate key */
-  struct key_info key_info;
-  CK_NEQ_PERROR(getrandom(key_info.key, sizeof(key_info.key), 0), -1);
+  struct rc4_key key;
+  CK_NEQ_PERROR(getrandom(key.bytes, sizeof(key.bytes), 0), -1);
   verbose("using key ");
-  for (int i = 0; i < sizeof(key_info.key); i++) {
-    verbose("%02hhx ", key_info.key[i]);
+  for (int i = 0; i < sizeof(key.bytes); i++) {
+    verbose("%02hhx ", key.bytes[i]);
   }
   verbose("for RC4 encryption\n");
 
@@ -396,7 +396,7 @@ int main(int argc, char *argv[])
   void *loader_tp_info = loader_x86_64;
   if (use_inner_encryption) {
     struct trap_point_info *tp_info = NULL;
-    ret = apply_inner_encryption(elf_buf, elf_buf_size, &key_info, &tp_info);
+    ret = apply_inner_encryption(elf_buf, elf_buf_size, &key, &tp_info);
     if (ret == -1) {
       fprintf(stderr, "could not apply inner encryption\n");
       return -1;
@@ -408,7 +408,7 @@ int main(int argc, char *argv[])
 
   /* Apply outer encryption */
   ret = apply_outer_encryption(elf_buf, loader_tp_info, loader_tp_info_size,
-                               elf_buf_size, &key_info);
+                               elf_buf_size, &key);
   if (ret == -1) {
     fprintf(stderr, "could not apply outer encryption");
     return -1;

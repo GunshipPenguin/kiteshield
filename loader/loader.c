@@ -18,7 +18,7 @@
 #define PAGE_ALIGN_UP(ptr) ((((ptr) - 1) & PAGE_MASK) + PAGE_SIZE)
 #define PAGE_OFFSET(ptr) (ptr & ~(PAGE_MASK))
 
-struct key_info obfuscated_key __attribute__((section(".key_info")));
+struct rc4_key obfuscated_key __attribute__((section(".key")));
 
 static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
 {
@@ -201,15 +201,15 @@ static void setup_auxv(
 static void decrypt_packed_bin(
     void *packed_bin_start,
     size_t packed_bin_size,
-    struct key_info *key_info)
+    struct rc4_key *key)
 {
   struct rc4_state rc4;
-  rc4_init(&rc4, key_info->key, sizeof(key_info->key));
+  rc4_init(&rc4, key->bytes, sizeof(key->bytes));
 
 #ifdef DEBUG_OUTPUT
   minimal_printf(1, KITESHIELD_PREFIX "RC4 decrypting binary with key ");
   for (int i = 0; i < KEY_SIZE; i++) {
-    minimal_printf(1, "%hhx ", key_info->key[i]);
+    minimal_printf(1, "%hhx ", key->bytes[i]);
   }
   minimal_printf(1, "\n");
 #endif
@@ -245,7 +245,7 @@ void *load(void *entry_stacktop)
    */
   Elf64_Ehdr *packed_bin_ehdr = (Elf64_Ehdr *) (packed_bin_phdr->p_vaddr);
 
-  struct key_info actual_key;
+  struct rc4_key actual_key;
   loader_key_deobfuscate(&obfuscated_key, &actual_key);
 
   decrypt_packed_bin((void *) packed_bin_phdr->p_vaddr,

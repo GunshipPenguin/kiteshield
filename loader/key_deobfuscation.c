@@ -5,7 +5,7 @@
 
 #include "loader/include/types.h"
 
-void loader_key_deobfuscate(struct key_info *old_ki, struct key_info *new_ki) {
+void loader_key_deobfuscate(struct rc4_key *old_key, struct rc4_key *new_key) {
   /* "our" EHDR (ie. the one in the on-disk binary that was run) */
   Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) LOADER_ADDR;
 
@@ -20,6 +20,6 @@ void loader_key_deobfuscate(struct key_info *old_ki, struct key_info *new_ki) {
   void *loader_start = (void *) loader_phdr->p_vaddr + hdr_adjust;
   size_t loader_size = loader_phdr->p_memsz - hdr_adjust;
 
-  obf_deobf_key(old_ki, new_ki, loader_start, loader_size);
+  obf_deobf_key(old_key, new_key, loader_start, loader_size);
 }
 

@@ -21,8 +21,8 @@
 /* This struct is stored at a predefined offset in the loader code, allowing
  * the packer to copy the RC4 decryption key over the loader. */
 #define KEY_SIZE 16
-struct key_info {
-  unsigned char key[KEY_SIZE];
+struct rc4_key {
+  uint8_t bytes[KEY_SIZE];
 } __attribute__((packed));
 
 /* Represents a point in code at which we injected a single byte int3

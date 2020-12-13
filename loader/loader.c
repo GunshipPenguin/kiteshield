@@ -8,6 +8,7 @@
 #include "loader/include/debug.h"
 #include "loader/include/elf_auxv.h"
 #include "loader/include/syscalls.h"
+#include "loader/include/key_deobfuscation.h"
 
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
@@ -17,7 +18,7 @@
 #define PAGE_ALIGN_UP(ptr) ((((ptr) - 1) & PAGE_MASK) + PAGE_SIZE)
 #define PAGE_OFFSET(ptr) (ptr & ~(PAGE_MASK))
 
-struct key_info key_info __attribute__((section(".key_info")));
+struct key_info obfuscated_key __attribute__((section(".key_info")));
 
 static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
 {
@@ -200,19 +201,15 @@ static void setup_auxv(
 static void decrypt_packed_bin(
     void *packed_bin_start,
     size_t packed_bin_size,
-    void *loader_start,
-    size_t loader_size)
+    struct key_info *key_info)
 {
-  struct key_info actual_key;
-  obf_deobf_key(&key_info, &actual_key, loader_start, loader_size);
-
   struct rc4_state rc4;
-  rc4_init(&rc4, actual_key.key, sizeof(actual_key.key));
+  rc4_init(&rc4, key_info->key, sizeof(key_info->key));
 
 #ifdef DEBUG_OUTPUT
   minimal_printf(1, KITESHIELD_PREFIX "RC4 decrypting binary with key ");
   for (int i = 0; i < KEY_SIZE; i++) {
-    minimal_printf(1, "%hhx ", actual_key.key[i]);
+    minimal_printf(1, "%hhx ", key_info->key[i]);
   }
   minimal_printf(1, "\n");
 #endif
@@ -248,14 +245,12 @@ void *load(void *entry_stacktop)
    */
   Elf64_Ehdr *packed_bin_ehdr = (Elf64_Ehdr *) (packed_bin_phdr->p_vaddr);
 
-  /* The first ELF segment (loader code) includes the ehdr and two phdrs,
-   * adjust loader code start and size accordingly */
-  size_t hdr_adjust = sizeof(Elf64_Ehdr) + (2 * sizeof(Elf64_Phdr));
+  struct key_info actual_key;
+  loader_key_deobfuscate(&obfuscated_key, &actual_key);
 
   decrypt_packed_bin((void *) packed_bin_phdr->p_vaddr,
                      packed_bin_phdr->p_memsz,
-                     (void *) loader_phdr->p_vaddr + hdr_adjust,
-                     loader_phdr->p_memsz - hdr_adjust);
+                     &actual_key);
 
   void *interp_entry;
   void *interp_base;

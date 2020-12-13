@@ -155,10 +155,23 @@ static int produce_output_elf(
   return 0;
 }
 
-static int instrument_func(
+static void encrypt_memory_range(struct key_info *ki, void *start, size_t len)
+{
+  struct rc4_state rc4;
+  rc4_init(&rc4, ki->key, sizeof(ki->key));
+
+  uint8_t *curr = start;
+  for (size_t i = 0; i < len; i++) {
+    *curr = *curr ^ rc4_get_byte(&rc4);
+    curr++;
+  }
+}
+
+static int process_func(
     void *elf_start,
     Elf64_Sym *func_sym,
-    struct trap_point_info *tp_info)
+    struct trap_point_info *tp_info,
+    struct key_info *key_info)
 {
   uint8_t *func_start = elf_get_sym(elf_start, func_sym);
 
@@ -181,12 +194,12 @@ static int instrument_func(
       verbose("instrumenting ret instruction at vaddr %p, offset in func %u\n",
               addr, off);
 
-      struct trap_point *bs = &tp_info->arr[tp_info->num++];
-      bs->addr = addr;
-      bs->value = *code_ptr;
-      bs->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
-      bs->func_end = bs->func_start + func_sym->st_size;
-      bs->is_ret = 1;
+      struct trap_point *tp = &tp_info->arr[tp_info->num++];
+      tp->addr = addr;
+      tp->value = *code_ptr;
+      tp->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+      tp->func_end = tp->func_start + func_sym->st_size;
+      tp->is_ret = 1;
 
       /* 0xCC = int3 */
       *code_ptr = (uint8_t) 0xCC;
@@ -195,13 +208,17 @@ static int instrument_func(
     code_ptr += ix.Length;
   }
 
+  struct trap_point *tp = &tp_info->arr[tp_info->num++];
+  tp->addr = (void *) UNPACKED_BIN_LOAD_ADDR + func_sym->st_value;
+  tp->value = *func_start;
+  tp->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+  tp->func_end = tp->func_start + func_sym->st_size;
+  tp->is_ret = 0;
+
+  verbose("encrypting function at %p, len %u\n", func_sym->st_value, func_sym->st_size);
+  encrypt_memory_range(key_info, func_start, func_sym->st_size);
+
   /* Instrument entry point */
-  struct trap_point *bs = &tp_info->arr[tp_info->num++];
-  bs->addr = (void *) UNPACKED_BIN_LOAD_ADDR + func_sym->st_value;
-  bs->value = *func_start;
-  bs->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
-  bs->func_end = bs->func_start + func_sym->st_size;
-  bs->is_ret = 0;
   *func_start = 0xCC;
 
   return 0;
@@ -240,9 +257,9 @@ static int apply_inner_encryption(
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
 
-    /* Skip instrumenting functions in cases where it simply will not work or
-     * has the potential to mess things up. Specifically, this means we don't
-     * instrument functions that:
+    /* Skip instrumenting/encrypting functions in cases where it simply will
+     * not work or has the potential to mess things up. Specifically, this
+     * means we don't instrument functions that:
      *
      *  - Are not in .text (eg. stuff in .init)
      *  - Have an address of 0 (stuff that needs to be relocated, this should
@@ -264,7 +281,7 @@ static int apply_inner_encryption(
     verbose("instrumenting function %s\n",
         elf_get_sym_name(elf_start, sym, strtab));
 
-    if (instrument_func(elf_start, sym, *tp_info) == -1) {
+    if (process_func(elf_start, sym, *tp_info, key_info) == -1) {
       fprintf(stderr, "error instrumenting function %s\n",
               elf_get_sym_name(elf_start, sym, strtab));
     }
@@ -280,24 +297,16 @@ static int apply_outer_encryption(
     size_t packed_bin_size,
     struct key_info *key_info)
 {
-  struct rc4_state rc4;
-  rc4_init(&rc4, key_info->key, sizeof(key_info->key));
-
   verbose("attempting to apply outer encryption (whole-binary encryption)\n");
+
+  /* Encrypt the actual binary */
+  encrypt_memory_range(key_info, packed_bin_start, packed_bin_size);
 
   /* Obfuscate Key */
   struct key_info obfuscated_key;
   obf_deobf_key(key_info, &obfuscated_key, loader_start, loader_size);
 
-  /* Encrypt the actual binary */
-  /* skip the first sizeof(struct key_info) bytes as that has the key itself */
-  unsigned char *curr = (unsigned char *) packed_bin_start;
-  for (size_t i = 0; i < packed_bin_size; i++) {
-    *curr = *curr ^ rc4_get_byte(&rc4);
-    curr++;
-  }
-
-  /* Copy over key_info struct so the loader can decrypt */
+  /* Copy over obfuscated key so the loader can decrypt */
   *((struct key_info *) loader_start) = obfuscated_key;
 
   return 0;

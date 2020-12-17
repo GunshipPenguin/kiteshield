@@ -188,5 +188,7 @@ long sys_ptrace(enum __ptrace_request, pid_t pid, void *addr, void *data);
 
 pid_t sys_wait4(int *wstatus);
 
+pid_t sys_fork();
+
 #endif /* __KITESHIELD_SYSCALLS_H */
 

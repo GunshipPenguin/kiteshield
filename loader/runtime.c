@@ -142,8 +142,8 @@ void runtime_start()
   }
 #endif
 
+  int wstatus;
   while (1) {
-    int wstatus;
     pid_t pid = sys_wait4(&wstatus);
 
     DIE_IF(pid == -1, "wait4 syscall failed");
@@ -159,15 +159,20 @@ void runtime_start()
   }
 }
 
-/* Called into by the child to setup ptrace just before handing off control
- * to the packed binary */
-long child_setup_ptrace()
+void do_fork(void *entry)
 {
-  long ret = sys_ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-  DIE_IF(ret == -1, "child: sys_ptrace(PTRACE_TRACEME) failed");
+  pid_t ret = sys_fork();
+  DIE_IF_FMT(ret < 0, "fork failed with error %d", ret);
+
+  if (ret != 0) {
+    runtime_start();
+    sys_exit(0); /* Only the child returns from do_clone */
+  }
+
+  ret = sys_ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+  DIE_IF_FMT(ret < 0, "child: PTRACE_TRACEME failed with error %d", ret);
 
   DEBUG("child: PTRACE_TRACEME was successful");
   DEBUG("child: handing control to packed binary");
-  return ret;
 }
 

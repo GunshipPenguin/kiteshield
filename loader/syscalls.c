@@ -162,3 +162,16 @@ pid_t sys_wait4(int *wstatus)
   return ret;
 }
 
+pid_t sys_fork()
+{
+  pid_t ret = 0;
+
+  asm("movq $57, %%rax\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :);
+
+  return ret;
+}
+

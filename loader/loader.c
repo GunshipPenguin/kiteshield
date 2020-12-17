@@ -137,6 +137,8 @@ static void map_interp(void *path, void **entry, void **interp_base)
     DEBUG_FMT("mapped interpreter segment from fd with offset %p",
               curr_phdr.p_offset);
   }
+
+  DIE_IF(sys_close(interp_fd), "could not close interpreter binary");
 }
 
 static void map_elf_from_mem(

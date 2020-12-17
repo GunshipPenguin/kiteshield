@@ -172,6 +172,8 @@ off_t sys_lseek(int fd, off_t offset, int whence);
 
 int sys_open(const char *pathname, int flags, int mode);
 
+int sys_close(int fd);
+
 void sys_exit(int status);
 
 void *sys_mmap(

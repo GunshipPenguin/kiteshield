@@ -65,6 +65,20 @@ int sys_open(const char *pathname, int flags, int mode)
   return ret;
 }
 
+int sys_close(int fd)
+{
+  int ret = 0;
+
+  asm("mov $3, %%rax\n"
+      "movq %1, %%rdi\n"
+      "syscall\n"
+      "mov %%eax, %0"
+  :   "+rm" (ret)
+  :   "rm" (fd));
+
+  return ret;
+}
+
 void sys_exit(int status)
 {
   asm("mov $60, %%rax\n"

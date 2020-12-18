@@ -32,7 +32,7 @@ static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
                                   PAGE_ALIGN_DOWN(phdr.p_vaddr)),
                     phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
                     PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  DIE_IF(addr == MAP_FAILED, "mmap failure");
+  DIE_IF((long) addr < 0, "mmap failure");
   DEBUG_FMT("mapping LOAD section from packed binary at %p", addr);
 
   /* Copy data from the packed binary */
@@ -82,7 +82,7 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
                         prot, MAP_PRIVATE | MAP_FIXED,
                         fd,
                         PAGE_ALIGN_DOWN(phdr.p_offset));
-  DIE_IF(addr == MAP_FAILED,
+  DIE_IF((long) addr < 0,
          "mmap failure while mapping load section from fd");
 
   /* If p_memsz > p_filesz, the remaining space must be filled with zeros
@@ -92,7 +92,7 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
                                  phdr.p_memsz - phdr.p_filesz, prot,
                                  MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS,
                                  -1, 0);
-    DIE_IF(extra_space == MAP_FAILED,
+    DIE_IF((long) extra_space < 0,
            "mmap failure while mapping extra space for static vars");
   }
 
@@ -104,7 +104,7 @@ static void map_interp(void *path, void **entry, void **interp_base)
 {
   DEBUG_FMT("mapping INTERP ELF at path %s", path);
   int interp_fd = sys_open(path, O_RDONLY, 0);
-  DIE_IF(interp_fd == -1, "could not open interpreter binary");
+  DIE_IF(interp_fd < 0, "could not open interpreter binary");
 
   Elf64_Ehdr ehdr;
   DIE_IF(sys_read(interp_fd, &ehdr, sizeof(ehdr)) < 0,
@@ -138,7 +138,7 @@ static void map_interp(void *path, void **entry, void **interp_base)
               curr_phdr.p_offset);
   }
 
-  DIE_IF(sys_close(interp_fd), "could not close interpreter binary");
+  DIE_IF(sys_close(interp_fd) < 0, "could not close interpreter binary");
 }
 
 static void map_elf_from_mem(

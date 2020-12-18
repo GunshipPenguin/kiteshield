@@ -25,8 +25,6 @@
 #define PROT_EXEC 0x4
 #define PROT_NONE 0x0
 
-#define MAP_FAILED ((void *) -1)
-
 /* open syscall constants/defines */
 #define O_RDONLY 00
 #define O_WRONLY 01

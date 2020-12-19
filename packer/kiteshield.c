@@ -197,8 +197,9 @@ static int process_func(
       struct trap_point *tp = &tp_info->arr[tp_info->num++];
       tp->addr = addr;
       tp->value = *code_ptr;
-      tp->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
-      tp->func_end = tp->func_start + func_sym->st_size;
+      tp->fcn.start_addr = (void *)
+                            (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+      tp->fcn.len = func_sym->st_size;
       tp->is_ret = 1;
 
       /* 0xCC = int3 */
@@ -211,8 +212,9 @@ static int process_func(
   struct trap_point *tp = &tp_info->arr[tp_info->num++];
   tp->addr = (void *) UNPACKED_BIN_LOAD_ADDR + func_sym->st_value;
   tp->value = *func_start;
-  tp->func_start = (void *) (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
-  tp->func_end = tp->func_start + func_sym->st_size;
+  tp->fcn.start_addr = (void *)
+                        (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+  tp->fcn.len = func_sym->st_size;
   tp->is_ret = 0;
 
   verbose("encrypting function at %p, len %u\n", func_sym->st_value, func_sym->st_size);

@@ -27,6 +27,18 @@ struct trap_point *get_tp(void *addr) {
   return tp;
 }
 
+struct function *get_fcn_at_addr(void *addr)
+{
+  for (int i = 0; i < tp_info.num; i++) {
+    struct function *curr = &tp_info.arr[i].fcn;
+    if (curr->start_addr <= addr && (curr->start_addr + curr->len) > addr) {
+      return curr;
+    }
+  }
+
+  return NULL;
+}
+
 void set_byte_at_addr(pid_t pid, void *addr, uint8_t value)
 {
   long word;
@@ -58,16 +70,16 @@ void single_step(pid_t pid)
       WSTOPSIG(wstatus));
 }
 
-void encrypt_decrypt_func(
+void encrypt_decrypt_fcn(
     pid_t pid,
-    struct trap_point *trap_point,
+    struct function *fcn,
     struct rc4_key *key)
 {
   struct rc4_state rc4;
   rc4_init(&rc4, key->bytes, sizeof(key->bytes));
 
-  uint8_t *curr_addr = trap_point->func_start;
-  size_t remaining = trap_point->func_end - trap_point->func_start;
+  uint8_t *curr_addr = fcn->start_addr;
+  size_t remaining = fcn->len;
   while (remaining > 0) {
     long word;
     long res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) curr_addr, &word);
@@ -86,6 +98,73 @@ void encrypt_decrypt_func(
   }
 }
 
+void *get_stack_ret_addr(pid_t pid)
+{
+  struct user_regs_struct regs;
+  long res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+  DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
+
+  long word;
+  res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) regs.sp, &word);
+  DIE_IF_FMT(res < 0, "PTRACE_PEEKTEXT failed with error %d", res);
+
+  return (void *) word;
+}
+
+void handle_fcn_entry(pid_t pid, struct trap_point *tp, struct rc4_key *key)
+{
+  DEBUG_FMT("entering function at %p, decrypting", tp->fcn.start_addr);
+
+  /* Encrypt caller if needed */
+  void *call_point_addr = get_stack_ret_addr(pid);
+  struct function *caller_fcn = get_fcn_at_addr(call_point_addr);
+  if (caller_fcn) {
+    DEBUG_FMT("encrypting caller of %p at %p",
+              tp->fcn.start_addr, caller_fcn->start_addr);
+    encrypt_decrypt_fcn(pid, caller_fcn, key);
+  }
+
+  /* Decrypt callee */
+  encrypt_decrypt_fcn(pid, &tp->fcn, key);
+  set_byte_at_addr(pid, tp->addr, tp->value);
+  single_step(pid);
+}
+
+void handle_fcn_exit(pid_t pid, struct trap_point *tp, struct rc4_key *key)
+{
+  DEBUG_FMT("leaving function starting at %p from %p",
+            tp->fcn.start_addr, tp->addr);
+  set_byte_at_addr(pid, tp->addr, tp->value);
+  single_step(pid);
+  set_byte_at_addr(pid, tp->addr, 0xCC);
+
+  /* We've now executed the ret instruction, if we're still in the same
+   * function (ie. recursion), don't do anything, otherwise, encrypt the
+   * function we've returned from.
+   */
+  struct user_regs_struct regs;
+  long res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+  DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
+
+  struct function *returnee = get_fcn_at_addr((void *) regs.ip);
+  if (returnee && returnee->start_addr != tp->fcn.start_addr) {
+    DEBUG_FMT("encrypting function at %p since we're leaving it",
+              tp->fcn.start_addr);
+    encrypt_decrypt_fcn(pid, returnee, key);
+    set_byte_at_addr(pid, tp->fcn.start_addr, 0xCC);
+  }
+#ifdef DEBUG_OUTPUT
+  else if (!returnee) {
+    DEBUG_FMT(
+        "not encrypting function at ip=%p since we don't have a record of it",
+        regs.ip);
+  } else {
+    DEBUG_FMT("not encrypting function at %p since it's returning to itself",
+              returnee->start_addr);
+  }
+#endif
+}
+
 void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 {
   long res;
@@ -97,28 +176,17 @@ void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
              "child was stopped by signal %u at pc = %p, exiting",
              WSTOPSIG(wstatus), regs.ip);
 
-  /* Back up the instruction pointer, replace the int3 byte with the original
-   * program code, single step through the original instruction and replace
-   * the int3 */
+  /* Back up the instruction pointer, to the start of the int3 in preparation
+   * for executing the original instruction */
   regs.ip--;
   res = sys_ptrace(PTRACE_SETREGS, pid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_SETREGS failed with error %d", res);
 
   struct trap_point *tp = get_tp((void *) regs.ip);
-
   if (tp->is_ret) {
-    DEBUG_FMT("leaving function starting at %p from %p, encrypting",
-              tp->func_start, tp->addr);
-    set_byte_at_addr(pid, (void *) regs.ip, tp->value);
-    single_step(pid);
-    encrypt_decrypt_func(pid, tp, key);
-    set_byte_at_addr(pid, tp->func_start, 0xCC);
+    handle_fcn_exit(pid, tp, key);
   } else {
-    DEBUG_FMT("entering function at %p, decrypting",
-              tp->func_start, tp->func_end);
-    encrypt_decrypt_func(pid, tp, key);
-    set_byte_at_addr(pid, (void *) regs.ip, tp->value);
-    single_step(pid);
+    handle_fcn_entry(pid, tp, key);
   }
 
   res = sys_ptrace(PTRACE_CONT, pid, NULL, NULL);

@@ -25,6 +25,12 @@ struct rc4_key {
   uint8_t bytes[KEY_SIZE];
 } __attribute__((packed));
 
+/* Represents a function that contains a trap point */
+struct function {
+  void *start_addr;
+  uint32_t len;
+};
+
 /* Represents a point in code at which we injected a single byte int3
  * instruction so that the program will trap into the ptrace runtime to decrypt
  * or encrypt the current function when entering or returning from it
@@ -39,9 +45,8 @@ struct trap_point {
    * execute the original instruction */
   uint8_t value;
 
-  /* Start and end address of function to encrypt/decrypt */
-  void *func_start;
-  void *func_end;
+  /* Info about function containing this trap point */
+  struct function fcn;
 
   /* 1 if this is a ret instruction, 0 if this trap point marks the start of a
    * function (so the runtime knows whether to encrypt or decrypt respectively)

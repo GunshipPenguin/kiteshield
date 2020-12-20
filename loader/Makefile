@@ -5,11 +5,13 @@ OBJS = $(addprefix out/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
 
 .PHONY: all output_dirs debug clean
 
-debug: CFLAGS += -DDEBUG_OUTPUT
+debug: CFLAGS += -DDEBUG_OUTPUT -DNO_ANTIDEBUG
+debug-antidebug: CFLAGS += -DDEBUG_OUTPUT
 
 all: output_dirs out/loader_header.h
 
 debug: all
+debug-antidebug: all
 
 output_dirs:
 	mkdir -p out

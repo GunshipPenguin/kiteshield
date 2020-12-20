@@ -189,3 +189,18 @@ pid_t sys_fork()
   return ret;
 }
 
+int sys_kill(pid_t pid, int sig)
+{
+  pid_t ret = 0;
+
+  asm("movq $62, %%rax\n"
+      "movl %1, %%edi\n"
+      "movl %2, %%esi\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (pid), "rm" (sig));
+
+  return ret;
+}
+

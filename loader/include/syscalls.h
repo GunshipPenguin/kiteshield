@@ -190,5 +190,7 @@ pid_t sys_wait4(int *wstatus);
 
 pid_t sys_fork();
 
+int sys_kill(pid_t pid, int sig);
+
 #endif /* __KITESHIELD_SYSCALLS_H */
 

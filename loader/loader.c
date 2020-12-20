@@ -9,6 +9,7 @@
 #include "loader/include/elf_auxv.h"
 #include "loader/include/syscalls.h"
 #include "loader/include/key_deobfuscation.h"
+#include "loader/include/anti_debug.h"
 
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
@@ -228,6 +229,9 @@ static void decrypt_packed_bin(
 /* Load the packed binary, returns the address to hand control to when done */
 void *load(void *entry_stacktop)
 {
+  if (check_traced())
+    DIE(TRACED_MSG);
+
   /* As per the SVr4 ABI */
   /* int argc = (int) *((unsigned long long *) entry_stacktop); */
   char **argv = ((char **) entry_stacktop) + 1;

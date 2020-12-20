@@ -6,6 +6,7 @@
 #include "loader/include/syscalls.h"
 #include "loader/include/signal.h"
 #include "loader/include/key_deobfuscation.h"
+#include "loader/include/anti_debug.h"
 
 struct trap_point_info tp_info __attribute__((section(".tp_info")));
 
@@ -116,6 +117,11 @@ static void handle_fcn_entry(
     struct trap_point *tp,
     struct rc4_key *key)
 {
+  if (check_traced()) {
+    sys_kill(pid, SIGKILL);
+    DIE(TRACED_MSG);
+  }
+
   DEBUG_FMT("entering function at %p, decrypting", tp->fcn.start_addr);
 
   /* Encrypt caller if needed */
@@ -138,6 +144,11 @@ static void handle_fcn_exit(
     struct trap_point *tp,
     struct rc4_key *key)
 {
+  if (check_traced()) {
+    sys_kill(pid, SIGKILL);
+    DIE(TRACED_MSG);
+  }
+
   DEBUG_FMT("leaving function starting at %p from %p",
             tp->fcn.start_addr, tp->addr);
   set_byte_at_addr(pid, tp->addr, tp->value);
@@ -173,6 +184,11 @@ static void handle_fcn_exit(
 
 static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 {
+  if (check_traced()) {
+    sys_kill(pid, SIGKILL);
+    DIE(TRACED_MSG);
+  }
+
   long res;
   struct user_regs_struct regs;
 
@@ -216,8 +232,14 @@ void runtime_start()
   }
 #endif
 
-  int wstatus;
+  /* ptrace checks are scattered throughout the runtime to interfere with
+   * debugger attaches as much as possible.
+   */
+  if (check_traced())
+    DIE(TRACED_MSG);
+
   while (1) {
+    int wstatus;
     pid_t pid = sys_wait4(&wstatus);
 
     DIE_IF(pid == -1, "wait4 syscall failed");
@@ -229,12 +251,20 @@ void runtime_start()
                "child was stopped by unexpected signal %u, exiting",
                WSTOPSIG(wstatus));
 
+    if (check_traced()) {
+      sys_kill(pid, SIGKILL);
+      DIE(TRACED_MSG);
+    }
+
     handle_trap(pid, wstatus, &actual_key);
   }
 }
 
 void do_fork(void *entry)
 {
+  if (check_traced())
+    DIE(TRACED_MSG);
+
   pid_t ret = sys_fork();
   DIE_IF_FMT(ret < 0, "fork failed with error %d", ret);
 

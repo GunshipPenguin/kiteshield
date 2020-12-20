@@ -26,12 +26,7 @@
     sys_exit(1);                                                              \
   } while (0)
 #else
-#define DIE(msg)                                                              \
-  do {                                                                        \
-    if (cond) {                                                               \
-      sys_exit(0);                                                            \
-    }                                                                         \
-  } while (0)
+#define DIE(msg) sys_exit(0)
 #endif
 
 #ifdef DEBUG_OUTPUT

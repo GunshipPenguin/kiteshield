@@ -27,7 +27,7 @@ struct trap_point *get_tp(void *addr) {
   return tp;
 }
 
-struct function *get_fcn_at_addr(void *addr)
+static struct function *get_fcn_at_addr(void *addr)
 {
   for (int i = 0; i < tp_info.num; i++) {
     struct function *curr = &tp_info.arr[i].fcn;
@@ -39,7 +39,7 @@ struct function *get_fcn_at_addr(void *addr)
   return NULL;
 }
 
-void set_byte_at_addr(pid_t pid, void *addr, uint8_t value)
+static void set_byte_at_addr(pid_t pid, void *addr, uint8_t value)
 {
   long word;
   long res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) addr, &word);
@@ -52,7 +52,7 @@ void set_byte_at_addr(pid_t pid, void *addr, uint8_t value)
   DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
 }
 
-void single_step(pid_t pid)
+static void single_step(pid_t pid)
 {
   long res = sys_ptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
   DIE_IF_FMT(res < 0, "PTRACE_SINGLESTEP failed with error %d", res);
@@ -70,7 +70,7 @@ void single_step(pid_t pid)
       WSTOPSIG(wstatus));
 }
 
-void encrypt_decrypt_fcn(
+static void encrypt_decrypt_fcn(
     pid_t pid,
     struct function *fcn,
     struct rc4_key *key)
@@ -98,7 +98,7 @@ void encrypt_decrypt_fcn(
   }
 }
 
-void *get_stack_ret_addr(pid_t pid)
+static void *get_stack_ret_addr(pid_t pid)
 {
   struct user_regs_struct regs;
   long res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
@@ -111,7 +111,10 @@ void *get_stack_ret_addr(pid_t pid)
   return (void *) word;
 }
 
-void handle_fcn_entry(pid_t pid, struct trap_point *tp, struct rc4_key *key)
+static void handle_fcn_entry(
+    pid_t pid,
+    struct trap_point *tp,
+    struct rc4_key *key)
 {
   DEBUG_FMT("entering function at %p, decrypting", tp->fcn.start_addr);
 
@@ -130,7 +133,10 @@ void handle_fcn_entry(pid_t pid, struct trap_point *tp, struct rc4_key *key)
   single_step(pid);
 }
 
-void handle_fcn_exit(pid_t pid, struct trap_point *tp, struct rc4_key *key)
+static void handle_fcn_exit(
+    pid_t pid,
+    struct trap_point *tp,
+    struct rc4_key *key)
 {
   DEBUG_FMT("leaving function starting at %p from %p",
             tp->fcn.start_addr, tp->addr);
@@ -165,7 +171,7 @@ void handle_fcn_exit(pid_t pid, struct trap_point *tp, struct rc4_key *key)
 #endif
 }
 
-void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
+static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 {
   long res;
   struct user_regs_struct regs;

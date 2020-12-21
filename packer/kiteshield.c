@@ -202,8 +202,7 @@ static int process_func(
       tp->fcn.len = func_sym->st_size;
       tp->is_ret = 1;
 
-      /* 0xCC = int3 */
-      *code_ptr = (uint8_t) 0xCC;
+      *code_ptr = INT3;
     }
 
     code_ptr += ix.Length;
@@ -221,7 +220,7 @@ static int process_func(
   encrypt_memory_range(key, func_start, func_sym->st_size);
 
   /* Instrument entry point */
-  *func_start = 0xCC;
+  *func_start = INT3;
 
   return 0;
 }

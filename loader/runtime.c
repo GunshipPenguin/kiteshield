@@ -153,7 +153,7 @@ static void handle_fcn_exit(
             tp->fcn.start_addr, tp->addr);
   set_byte_at_addr(pid, tp->addr, tp->value);
   single_step(pid);
-  set_byte_at_addr(pid, tp->addr, 0xCC);
+  set_byte_at_addr(pid, tp->addr, INT3);
 
   /* We've now executed the ret instruction, if we're still in the same
    * function (ie. recursion), don't do anything, otherwise, encrypt the
@@ -168,7 +168,7 @@ static void handle_fcn_exit(
     DEBUG_FMT("encrypting function at %p since we're leaving it",
               tp->fcn.start_addr);
     encrypt_decrypt_fcn(pid, returnee, key);
-    set_byte_at_addr(pid, tp->fcn.start_addr, 0xCC);
+    set_byte_at_addr(pid, tp->fcn.start_addr, INT3);
   }
 #ifdef DEBUG_OUTPUT
   else if (!returnee) {

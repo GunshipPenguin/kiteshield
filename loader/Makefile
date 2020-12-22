@@ -1,4 +1,5 @@
-CFLAGS = -Wall -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
+CFLAGS = -Wall -fno-pie -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
+LDFLAGS = -no-pie
 
 SRCS = $(wildcard *.[c,S] ../common/*.c)
 OBJS = $(addprefix out/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
@@ -17,7 +18,7 @@ output_dirs:
 	mkdir -p out
 
 out/loader_header.h: $(OBJS)
-	$(LD) $(OBJS) -T link.lds -o out/loader.bin
+	$(LD) $(LDFLAGS) $(OBJS) -T link.lds -o out/loader.bin
 	cat out/loader.bin | python3 bin_to_header.py loader_x86_64 > out/loader_header.h
 
 out/%.o: %.c

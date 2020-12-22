@@ -211,6 +211,11 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
     handle_fcn_entry(pid, tp, key);
   }
 
+  if (antidebug_signal_check()) {
+    sys_kill(pid, SIGKILL);
+    DIE(TRACED_MSG);
+  }
+
   res = sys_ptrace(PTRACE_CONT, pid, NULL, NULL);
   DIE_IF_FMT(res < 0, "PTRACE_CONT failed with error %d", res);
 }
@@ -223,6 +228,7 @@ void runtime_start()
   struct rc4_key actual_key;
   loader_key_deobfuscate(&obfuscated_key, &actual_key);
 
+  signal_antidebug_init();
 #ifdef DEBUG_OUTPUT
   for (int i = 0; i < tp_info.num; i++) {
     struct trap_point tp = tp_info.arr[i];
@@ -232,7 +238,7 @@ void runtime_start()
   }
 #endif
 
-  /* ptrace checks are scattered throughout the runtime to interfere with
+  /* debugger checks are scattered throughout the runtime to interfere with
    * debugger attaches as much as possible.
    */
   if (check_traced())
@@ -252,6 +258,11 @@ void runtime_start()
                WSTOPSIG(wstatus));
 
     if (check_traced()) {
+      sys_kill(pid, SIGKILL);
+      DIE(TRACED_MSG);
+    }
+
+    if (antidebug_signal_check()) {
       sys_kill(pid, SIGKILL);
       DIE(TRACED_MSG);
     }

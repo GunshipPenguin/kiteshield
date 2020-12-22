@@ -4,7 +4,7 @@ ENTRY(_start)
 
 SECTIONS
 {
-  . = 0x0000000000000000;
+  . = 0x4000b0;
   .key : {
     *loader.o(.key)
   }
@@ -13,6 +13,9 @@ SECTIONS
     *loader.o(.text)
     *runtime.o(.text)
     *key_utils.o(.text)
+  }
+  .bss : {
+    *(.bss)
   }
   .data : {
     *(.data)

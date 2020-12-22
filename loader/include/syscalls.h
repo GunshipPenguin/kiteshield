@@ -161,18 +161,53 @@ struct user_regs_struct {
 # define WIFCONTINUED(status) ((status) == W_CONTINUED)
 #endif
 
+/* rt_sigaction syscall constants/defines */
+struct kernel_sigaction {
+  void (*sa_handler)(int);
+  unsigned long sa_flags;
+  void (*sa_restorer)(void);
+  unsigned long sa_mask;
+};
+
+#define SA_NOCLDSTOP	0x00000001u
+#define SA_NOCLDWAIT	0x00000002u
+#define SA_SIGINFO	0x00000004u
+#define SA_ONSTACK	0x08000000u
+#define SA_RESTART	0x10000000u
+#define SA_NODEFER	0x40000000u
+#define SA_RESETHAND	0x80000000u
+
+#define SA_NOMASK	SA_NODEFER
+#define SA_ONESHOT	SA_RESETHAND
+
+#define SA_RESTORER	0x04000000
+
 /* syscall wrapper prototypes */
-ssize_t sys_write(int fd, const char *s, size_t count);
+ssize_t sys_write(
+    int fd,
+    const char *s,
+    size_t count);
 
-ssize_t sys_read(int fd, void *buf, size_t count);
+ssize_t sys_read(
+    int fd,
+    void *buf,
+    size_t count);
 
-off_t sys_lseek(int fd, off_t offset, int whence);
+off_t sys_lseek(
+    int fd,
+    off_t offset,
+    int whence);
 
-int sys_open(const char *pathname, int flags, int mode);
+int sys_open(
+    const char *pathname,
+    int flags,
+    int mode);
 
-int sys_close(int fd);
+int sys_close(
+    int fd);
 
-void sys_exit(int status);
+void sys_exit(
+    int status);
 
 void *sys_mmap(
     void *addr,
@@ -182,15 +217,32 @@ void *sys_mmap(
     int fd,
     off_t offset);
 
-int sys_mprotect(void *addr, size_t len, int prot);
+int sys_mprotect(
+    void *addr,
+    size_t len,
+    int prot);
 
-long sys_ptrace(enum __ptrace_request, pid_t pid, void *addr, void *data);
+long sys_ptrace(
+    enum __ptrace_request,
+    pid_t pid,
+    void *addr,
+    void *data);
 
-pid_t sys_wait4(int *wstatus);
+pid_t sys_wait4(
+    int *wstatus);
 
 pid_t sys_fork();
 
-int sys_kill(pid_t pid, int sig);
+int sys_kill(
+    pid_t pid,
+    int sig);
+
+pid_t sys_getpid();
+
+int sys_rt_sigaction(
+    int sig,
+    const struct kernel_sigaction *act,
+    const struct kernel_sigaction *oact);
 
 #endif /* __KITESHIELD_SYSCALLS_H */
 

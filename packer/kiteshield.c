@@ -128,7 +128,7 @@ static int produce_output_elf(
   loader_phdr.p_paddr = loader_phdr.p_vaddr;
   loader_phdr.p_filesz = loader_size + hdrs_size;
   loader_phdr.p_memsz = loader_size + hdrs_size;
-  loader_phdr.p_flags = PF_R | PF_X;
+  loader_phdr.p_flags = PF_R | PF_W | PF_X;
   loader_phdr.p_align = 0x200000;
   CK_NEQ_PERROR(fwrite(&loader_phdr, sizeof(loader_phdr), 1, output_file), 0);
 

@@ -1,6 +1,11 @@
 #ifndef __KITESHIELD_ANTI_DEBUG_H
 #define __KITESHIELD_ANTI_DEBUG_H
 
+#include "loader/include/types.h"
+#include "loader/include/syscalls.h"
+#include "loader/include/signal.h"
+#include "loader/include/debug.h"
+
 #define TRACED_MSG "We're being traced, exiting (-DNO_ANTIDEBUG to suppress)"
 
 static int strncmp(const char *s1, const char *s2, size_t n)
@@ -61,6 +66,23 @@ static inline int __attribute__((always_inline)) check_traced()
       "Could not find TracerPid in /proc/self/status, assuming we're traced");
   return 1;
 }
+
+/* Always inline antidebug_signal_check() for the same reasons as
+ * check_traced() above. */
+extern int sigtrap_counter;
+static inline int __attribute__((always_inline)) antidebug_signal_check()
+{
+#ifdef NO_ANTIDEBUG
+  return 0;
+#endif
+
+  int oldval = sigtrap_counter;
+  asm volatile ("int3");
+
+  return sigtrap_counter != oldval + 1;
+}
+
+void signal_antidebug_init();
 
 #endif /* __KITESHIELD_ANTI_DEBUG_H */
 

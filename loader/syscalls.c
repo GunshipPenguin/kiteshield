@@ -204,3 +204,37 @@ int sys_kill(pid_t pid, int sig)
   return ret;
 }
 
+pid_t sys_getpid()
+{
+  pid_t ret = 0;
+
+  asm("movq $39, %%rax\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :);
+
+  return ret;
+}
+
+int sys_rt_sigaction(
+    int sig,
+    const struct kernel_sigaction *act,
+    const struct kernel_sigaction *oact)
+{
+  int ret = 0;
+  size_t sigsetsize = sizeof(act->sa_mask);
+
+  asm("movq $13, %%rax\n"
+      "movl %1, %%edi\n"
+      "movq %2, %%rsi\n"
+      "movq %3, %%rdx\n"
+      "movq %4, %%r10\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (sig), "rm" (act), "rm" (oact), "rm" (sigsetsize));
+
+  return ret;
+}
+

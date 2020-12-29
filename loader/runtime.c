@@ -227,17 +227,18 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 void runtime_start()
 {
   DEBUG("starting ptrace runtime");
-  DEBUG_FMT("number of tp_info entries: %u", tp_info.num);
+  DEBUG_FMT("number of trap points: %u", tp_info.num);
 
   struct rc4_key actual_key;
   loader_key_deobfuscate(&obfuscated_key, &actual_key);
 
   signal_antidebug_init();
+
 #ifdef DEBUG_OUTPUT
   for (int i = 0; i < tp_info.num; i++) {
     struct trap_point tp = tp_info.arr[i];
     DEBUG_FMT(
-        "tp_info entry %u: value = %hhx, addr = %p",
+        "trap point %u: value = %hhx, addr = %p",
         i, tp.value, tp.addr);
   }
 #endif

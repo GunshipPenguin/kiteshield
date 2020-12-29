@@ -7,7 +7,10 @@
 #define INT3 0xCC
 
 /* Address at which the loader is initially loaded by the kernel on exec (ie.
- * the p_vaddr field in the binary) */
+ * the p_vaddr field in the binary). Note that if this is updated, the base
+ * address in the linker script for the loader code must be updated
+ * accordingly.
+ */
 #define LOADER_ADDR 0x400000ULL
 
 /* Address at which the packed binary is initially loaded by the kernel on

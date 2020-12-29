@@ -329,7 +329,7 @@ static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
 
   *new_size = sizeof(loader_x86_64) + tp_info_size;
   verbose(
-      "Injected byte sub info into loader old size: %u new size: %u\n",
+      "Injected trap point info into loader old size: %u new size: %u\n",
       sizeof(loader_x86_64), *new_size);
   return loader_tp_info;
 }
@@ -403,7 +403,7 @@ int main(int argc, char *argv[])
       return -1;
     }
 
-    /* Inject byte sub info into loader */
+    /* Inject trap point info into loader */
     loader_tp_info = inject_tp_info(tp_info, &loader_tp_info_size);
   }
 

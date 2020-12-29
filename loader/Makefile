@@ -18,7 +18,8 @@ output_dirs:
 	mkdir -p out
 
 out/loader_header.h: $(OBJS)
-	$(LD) $(LDFLAGS) $(OBJS) -T link.lds -o out/loader.bin
+	$(LD) $(LDFLAGS) $(OBJS) -T link.lds -o out/loader-elf
+	objcopy -O binary out/loader-elf out/loader.bin
 	cat out/loader.bin | python3 bin_to_header.py loader_x86_64 > out/loader_header.h
 
 out/%.o: %.c

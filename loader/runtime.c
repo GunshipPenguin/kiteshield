@@ -248,10 +248,9 @@ void runtime_start()
   if (check_traced())
     DIE(TRACED_MSG);
 
-  int dumpable_ret = sys_prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
-  DIE_IF_FMT(
-      dumpable_ret != 0,
-      "prctl(PR_SET_DUMPABLE) failed with %d", dumpable_ret);
+  /* Do the prctl down here so a reverse engineer will have to defeat the
+   * preceeding check_traced() call before prctl shows up in a strace */
+  antidebug_set_nondumpable();
 
   while (1) {
     int wstatus;

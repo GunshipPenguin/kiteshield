@@ -83,6 +83,7 @@ static inline int __attribute__((always_inline)) antidebug_signal_check()
 }
 
 void signal_antidebug_init();
+void antidebug_set_nondumpable();
 
 #endif /* __KITESHIELD_ANTI_DEBUG_H */
 

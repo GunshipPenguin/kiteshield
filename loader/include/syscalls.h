@@ -182,6 +182,10 @@ struct kernel_sigaction {
 
 #define SA_RESTORER	0x04000000
 
+/* prctl constants/defines */
+#define PR_GET_DUMPABLE   3
+#define PR_SET_DUMPABLE   4
+
 /* syscall wrapper prototypes */
 ssize_t sys_write(
     int fd,
@@ -243,6 +247,13 @@ int sys_rt_sigaction(
     int sig,
     const struct kernel_sigaction *act,
     const struct kernel_sigaction *oact);
+
+int sys_prctl(
+    int option,
+    unsigned long arg2,
+    unsigned long arg3,
+    unsigned long arg4,
+    unsigned long arg5);
 
 #endif /* __KITESHIELD_SYSCALLS_H */
 

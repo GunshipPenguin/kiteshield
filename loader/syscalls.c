@@ -238,3 +238,26 @@ int sys_rt_sigaction(
   return ret;
 }
 
+int sys_prctl(
+    int option,
+    unsigned long arg2,
+    unsigned long arg3,
+    unsigned long arg4,
+    unsigned long arg5)
+{
+  int ret = 0;
+
+  asm("movq $157, %%rax\n"
+      "movq %1, %%rdi\n"
+      "movq %2, %%rsi\n"
+      "movq %3, %%rdx\n"
+      "movq %4, %%r10\n"
+      "movq %5, %%r8\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (option), "rm" (arg2), "rm" (arg3), "rm" (arg4), "rm" (arg5));
+
+  return ret;
+}
+

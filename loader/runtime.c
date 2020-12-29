@@ -60,11 +60,18 @@ static void single_step(pid_t pid)
   int wstatus;
   sys_wait4(&wstatus);
 
-  DIE_IF_FMT(WIFEXITED(wstatus),
-             "child exited with status %u during single step",
-             WEXITSTATUS(wstatus));
-  DIE_IF(!WIFSTOPPED(wstatus),
-         "child was stopped unexpectedly during single step, exiting");
+  DIE_IF_FMT(pid == -1, "wait4 syscall failed with error %d", pid);
+  DIE_IF_FMT(
+      WIFEXITED(wstatus),
+      "child exited with status %u during single step",
+      WEXITSTATUS(wstatus));
+  DIE_IF_FMT(
+      WIFSIGNALED(wstatus),
+      "child was killed by signal, %u during single step, exiting",
+      WTERMSIG(wstatus));
+  DIE_IF(
+      !WIFSTOPPED(wstatus),
+      "child was stopped unexpectedly during single step, exiting");
   DIE_IF_FMT(
       WSTOPSIG(wstatus) != SIGTRAP,
       "child was stopped by unexpected signal %u during single step, exiting",
@@ -194,9 +201,6 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 
   res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
-  DIE_IF_FMT(WSTOPSIG(wstatus) != SIGTRAP,
-             "child was stopped by signal %u at pc = %p, exiting",
-             WSTOPSIG(wstatus), regs.ip);
 
   /* Back up the instruction pointer, to the start of the int3 in preparation
    * for executing the original instruction */
@@ -248,14 +252,20 @@ void runtime_start()
     int wstatus;
     pid_t pid = sys_wait4(&wstatus);
 
-    DIE_IF(pid == -1, "wait4 syscall failed");
-    DIE_IF_FMT(WIFEXITED(wstatus),
-               "child exited with status %u", WEXITSTATUS(wstatus));
-    DIE_IF(!WIFSTOPPED(wstatus),
-           "child was stopped unexpectedly, exiting");
-    DIE_IF_FMT(WSTOPSIG(wstatus) != SIGTRAP,
-               "child was stopped by unexpected signal %u, exiting",
-               WSTOPSIG(wstatus));
+    DIE_IF_FMT(pid == -1, "wait4 syscall failed with error %d", pid);
+    DIE_IF_FMT(
+        WIFEXITED(wstatus),
+        "child exited with status %u", WEXITSTATUS(wstatus));
+    DIE_IF_FMT(
+        WIFSIGNALED(wstatus),
+        "child was killed by signal, %u exiting", WTERMSIG(wstatus));
+    DIE_IF(
+        !WIFSTOPPED(wstatus),
+        "child was stopped unexpectedly, exiting");
+    DIE_IF_FMT(
+        WSTOPSIG(wstatus) != SIGTRAP,
+        "child was stopped by unexpected signal %u, exiting",
+        WSTOPSIG(wstatus));
 
     if (check_traced()) {
       sys_kill(pid, SIGKILL);

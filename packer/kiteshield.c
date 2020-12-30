@@ -334,6 +334,42 @@ static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
   return loader_tp_info;
 }
 
+/* Remove everything not needed for program execution from the binary */
+size_t full_strip(void *elf, void **new_elf)
+{
+  Elf64_Ehdr *ehdr = elf;
+  Elf64_Phdr *phdr_start = (Elf64_Phdr *) (((uint8_t *) elf) + ehdr->e_phoff);
+  Elf64_Phdr *curr_phdr = phdr_start;
+  size_t new_size = 0;
+  verbose("stripping input binary");
+
+  /* Calculate minimum size needed to contain all program headers */
+  for (int i = 0; i < ehdr->e_phnum; i++) {
+    size_t seg_end = curr_phdr->p_offset + curr_phdr->p_filesz;
+    if (seg_end > new_size)
+      new_size = seg_end;
+    curr_phdr++;
+  }
+
+  *new_elf = malloc(new_size);
+  CK_NEQ_PERROR(*new_elf, NULL);
+
+  memcpy(*new_elf, elf, new_size);
+  Elf64_Ehdr *new_ehdr = *new_elf;
+
+  if (new_ehdr->e_shoff >= new_size) {
+    new_ehdr->e_shoff = 0;
+    new_ehdr->e_shnum = 0;
+    new_ehdr->e_shstrndx = 0;
+  } else {
+    fprintf(stdout,
+            "warning: could not strip out all section info from binary");
+    fprintf(stdout, "output binary may be corrupt!");
+  }
+
+  return new_size;
+}
+
 static void usage()
 {
   printf(
@@ -373,7 +409,6 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-
   /* Read ELF to be packed */
   void *elf_buf;
   size_t elf_buf_size;
@@ -407,9 +442,14 @@ int main(int argc, char *argv[])
     loader_tp_info = inject_tp_info(tp_info, &loader_tp_info_size);
   }
 
+  /* Fully strip binary */
+  void *elf_buf_strip;
+  size_t elf_buf_strip_size = full_strip(elf_buf, &elf_buf_strip);
+  free(elf_buf);
+
   /* Apply outer encryption */
-  ret = apply_outer_encryption(elf_buf, loader_tp_info, loader_tp_info_size,
-                               elf_buf_size, &key);
+  ret = apply_outer_encryption(elf_buf_strip, loader_tp_info,
+                               loader_tp_info_size, elf_buf_strip_size, &key);
   if (ret == -1) {
     fprintf(stderr, "could not apply outer encryption");
     return -1;
@@ -418,7 +458,7 @@ int main(int argc, char *argv[])
   /* Write output ELF */
   FILE *output_elf;
   CK_NEQ_PERROR(output_elf = fopen(output_bin, "w"), NULL);
-  ret = produce_output_elf(output_elf, elf_buf, elf_buf_size,
+  ret = produce_output_elf(output_elf, elf_buf_strip, elf_buf_strip_size,
                            loader_tp_info, loader_tp_info_size);
   if (ret == -1) {
     fprintf(stderr, "could not produce output ELF\n");

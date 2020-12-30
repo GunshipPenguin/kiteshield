@@ -363,8 +363,8 @@ size_t full_strip(void *elf, void **new_elf)
     new_ehdr->e_shstrndx = 0;
   } else {
     fprintf(stdout,
-            "warning: could not strip out all section info from binary");
-    fprintf(stdout, "output binary may be corrupt!");
+            "warning: could not strip out all section info from binary\n");
+    fprintf(stdout, "output binary may be corrupt!\n");
   }
 
   return new_size;

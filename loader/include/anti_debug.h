@@ -5,19 +5,9 @@
 #include "loader/include/syscalls.h"
 #include "loader/include/signal.h"
 #include "loader/include/debug.h"
+#include "loader/include/string.h"
 
 #define TRACED_MSG "We're being traced, exiting (-DNO_ANTIDEBUG to suppress)"
-
-static int strncmp(const char *s1, const char *s2, size_t n)
-{
-  for (int i = 0; i < n; i++) {
-    if (s1[i] != s2[i]) {
-      return 1;
-    }
-  }
-
-  return 0;
-}
 
 static const char *nextline(const char *curr_line)
 {
@@ -39,8 +29,17 @@ static inline int __attribute__((always_inline)) check_traced()
   return 0;
 #endif
 
-  int fd =  sys_open("/proc/self/status", O_RDONLY, 0);
-  DIE_IF_FMT(fd < 0, "could not open /proc/self/status, error %d", fd);
+  /* Use /proc/<pid>/status instead of /proc/self/status to make this just a
+   * bit more frusturating to circumvent as <pid> will change with each exec */
+  char proc_path[128] = "/proc/";
+  char pid_buf[32];
+  pid_t pid = sys_getpid();
+  itoa((unsigned long) pid, 0, pid_buf, sizeof(pid_t), 10);
+  strncat(proc_path, pid_buf, sizeof(pid_buf));
+  strncat(proc_path, "/status", sizeof(proc_path) - sizeof(pid_buf));
+
+  int fd =  sys_open(proc_path, O_RDONLY, 0);
+  DIE_IF_FMT(fd < 0, "could not open %s error %d", proc_path, fd);
 
   char buf[4096]; /* Should be enough to hold any /proc/<pid>/status */
   int ret = sys_read(fd, buf, sizeof(buf) - 1);

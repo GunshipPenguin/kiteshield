@@ -261,3 +261,18 @@ int sys_prctl(
   return ret;
 }
 
+int sys_stat(const char *pathname, struct stat *statbuf)
+{
+  int ret = 0;
+
+  asm("movq $4, %%rax\n"
+      "movq %1, %%rdi\n"
+      "movq %2, %%rsi\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (pathname), "rm" (statbuf));
+
+  return ret;
+}
+

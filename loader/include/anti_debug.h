@@ -38,6 +38,18 @@ static inline int __attribute__((always_inline)) check_traced()
   strncat(proc_path, pid_buf, sizeof(pid_buf));
   strncat(proc_path, "/status", sizeof(proc_path) - sizeof(pid_buf));
 
+  /* The check this function performs could be bypassed by running the process
+   * in a mount namespace with /proc being something controlable from userspace
+   * for instance, a bunch of regular files on an actual (non proc) filesystem.
+   * Check we're actually reading from a procfs by stat'ing /proc/<pid>/status
+   * and verifying that st_size is zero (which it should always be if /proc is
+   * a real procfs. If a reverse engineer tries to create a fake proc with a
+   * regular file for /proc/<pid>/status, st_size should be greater than 0. */
+  struct stat stat;
+  DIE_IF_FMT(sys_stat(proc_path, &stat) < 0, "could not stat %s", proc_path);
+  if (stat.st_size != 0)
+    return 1;
+
   int fd =  sys_open(proc_path, O_RDONLY, 0);
   DIE_IF_FMT(fd < 0, "could not open %s error %d", proc_path, fd);
 

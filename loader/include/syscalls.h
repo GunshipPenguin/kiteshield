@@ -186,6 +186,39 @@ struct kernel_sigaction {
 #define PR_GET_DUMPABLE   3
 #define PR_SET_DUMPABLE   4
 
+/* stat constants/defines */
+struct stat {
+	unsigned long long	st_dev;
+	unsigned char	__pad0[4];
+
+	unsigned long	__st_ino;
+
+	unsigned int	st_mode;
+	unsigned int	st_nlink;
+
+	unsigned long	st_uid;
+	unsigned long	st_gid;
+
+	unsigned long long	st_rdev;
+	unsigned char	__pad3[4];
+
+	long long	st_size;
+	unsigned long	st_blksize;
+
+	unsigned long long	st_blocks;
+
+	unsigned long	st_atime;
+	unsigned long	st_atime_nsec;
+
+	unsigned long	st_mtime;
+	unsigned int	st_mtime_nsec;
+
+	unsigned long	st_ctime;
+	unsigned long	st_ctime_nsec;
+
+	unsigned long long	st_ino;
+};
+
 /* syscall wrapper prototypes */
 ssize_t sys_write(
     int fd,
@@ -254,6 +287,10 @@ int sys_prctl(
     unsigned long arg3,
     unsigned long arg4,
     unsigned long arg5);
+
+int sys_stat(
+    const char *pathname,
+    struct stat *statbuf);
 
 #endif /* __KITESHIELD_SYSCALLS_H */
 

@@ -1,5 +1,6 @@
 #include "loader/include/string.h"
 #include "loader/include/types.h"
+#include "loader/include/obfuscated_strings.h"
 
 int strncmp(const char *s1, const char *s2, size_t n)
 {
@@ -47,7 +48,7 @@ void itoa(
     int bitwidth,
     int radix)
 {
-  static char *digits = "0123456789abcdef";
+  char *digits = DEOBF_STR(HEX_DIGITS);
   char *buf_ptr = buf;
 
   int negative = is_signed && ((1 << (bitwidth - 1)) & val);
@@ -77,6 +78,16 @@ size_t strnlen(const char *s, size_t maxlen)
 {
   int len = 0;
   while (*(s + len) != '\0' && len <= maxlen) {
+    len++;
+  }
+
+  return len;
+}
+
+size_t strlen(const char *s)
+{
+  int len = 0;
+  while (*(s + len) != '\0') {
     len++;
   }
 

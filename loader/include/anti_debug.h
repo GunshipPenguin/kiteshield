@@ -6,6 +6,7 @@
 #include "loader/include/signal.h"
 #include "loader/include/debug.h"
 #include "loader/include/string.h"
+#include "loader/include/obfuscated_strings.h"
 
 #define TRACED_MSG "We're being traced, exiting (-DNO_ANTIDEBUG to suppress)"
 
@@ -30,13 +31,18 @@ static inline int __attribute__((always_inline)) check_traced()
 #endif
 
   /* Use /proc/<pid>/status instead of /proc/self/status to make this just a
-   * bit more frusturating to circumvent as <pid> will change with each exec */
-  char proc_path[128] = "/proc/";
+   * bit more frusturating to circumvent as <pid> will change with each exec.
+   *
+   * PROC_DIR = "/proc/"
+   * SLASH_STATUS = "/status"
+   */
+  char proc_path[128];
+  strncpy(proc_path, DEOBF_STR(PROC_PATH), sizeof(proc_path));
   char pid_buf[32];
   pid_t pid = sys_getpid();
   itoa((unsigned long) pid, 0, pid_buf, sizeof(pid_t), 10);
   strncat(proc_path, pid_buf, sizeof(pid_buf));
-  strncat(proc_path, "/status", sizeof(proc_path) - sizeof(pid_buf));
+  strncat(proc_path, DEOBF_STR(SLASH_STATUS), sizeof(proc_path) - sizeof(pid_buf));
 
   /* The check this function performs could be bypassed by running the process
    * in a mount namespace with /proc being something controlable from userspace
@@ -59,8 +65,9 @@ static inline int __attribute__((always_inline)) check_traced()
   buf[ret] = '\0';
 
   const char *line = buf;
+  char *tracerpid_field = DEOBF_STR(TRACERPID_PROC_FIELD); /* "TracerPid:" */
   do {
-    if (strncmp(line, "TracerPid:", 10) != 0) continue;
+    if (strncmp(line, tracerpid_field, 10) != 0) continue;
 
     /* Strip spaces between : and the pid */
     const char *curr = line + 10;

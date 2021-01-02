@@ -11,6 +11,7 @@ cmake-build*
 obj/
 out/
 packer/kiteshield
+loader/include/obfuscated_strings.h
 
 # Packed binaries
 *.ks

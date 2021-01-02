@@ -9,13 +9,16 @@ OBJS = $(addprefix out/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
 debug: CFLAGS += -DDEBUG_OUTPUT -DNO_ANTIDEBUG
 debug-antidebug: CFLAGS += -DDEBUG_OUTPUT
 
-all: output_dirs out/loader_header.h
+all: output_dirs include/obfuscated_strings.h out/loader_header.h
 
 debug: all
 debug-antidebug: all
 
 output_dirs:
 	mkdir -p out
+
+include/obfuscated_strings.h:
+	python3 string_obfuscation.py > include/obfuscated_strings.h
 
 out/loader_header.h: $(OBJS)
 	$(LD) $(LDFLAGS) $(OBJS) -T link.lds -o out/loader-elf

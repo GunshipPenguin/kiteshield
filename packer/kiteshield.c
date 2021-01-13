@@ -167,13 +167,49 @@ static void encrypt_memory_range(struct rc4_key *key, void *start, size_t len)
   }
 }
 
+static uint64_t get_base_addr(Elf64_Ehdr *ehdr)
+{
+  /* Return the base address that the binary is to be mapped in at runtime. If
+   * statically linked, use absolute addresses (ie. base address = 0).
+   * Otherwise, everything is relative to UNPACKED_BIN_LOAD_ADDR. */
+  return ehdr->e_type == ET_EXEC ? 0ULL : UNPACKED_BIN_LOAD_ADDR;
+}
+
+static int is_instrumentable_jmp(
+    INSTRUX *ix,
+    uint64_t fcn_start,
+    size_t fcn_size,
+    uint64_t ix_addr)
+{
+  /* Indirect jump (eg. jump to value stored in register or at memory location.
+   * These must always be instrumented as we have no way at pack-time of
+   * knowing where they will hand control, thus the runtime must check them
+   * each time and encrypt/decrypt/do nothing as needed.
+   */
+  if (ix->Instruction == ND_INS_JMPNI)
+    return 1;
+
+  /* Jump with (known at pack-time) relative offset, check if it jumps out of
+   * its function, if so, it requires instrumentation. */
+  if (ix->Instruction == ND_INS_JMPNR || ix->Instruction == ND_INS_Jcc) {
+    int64_t displacement = (int64_t) ix->Operands[0].Info.RelativeOffset.Rel;
+    uint64_t jmp_dest = ix_addr + displacement;
+    if (jmp_dest < fcn_start || jmp_dest > fcn_start + fcn_size)
+      return 1;
+  }
+
+  return 0;
+}
+
 static int process_func(
     void *elf_start,
     Elf64_Sym *func_sym,
     struct trap_point_info *tp_info,
-    struct rc4_key *key)
+    struct rc4_key *key,
+    Elf64_Shdr *strtab)
 {
   uint8_t *func_start = elf_get_sym(elf_start, func_sym);
+  uint64_t base_addr = get_base_addr((Elf64_Ehdr *) elf_start);
 
   uint8_t *code_ptr = func_start;
   while (code_ptr < func_start + func_sym->st_size) {
@@ -184,23 +220,34 @@ static int process_func(
       fprintf(stderr, "instruction decoding failed\n");
       return -1;
     }
+    size_t off = (size_t) (code_ptr - func_start);
 
-    /* Ret opcodes */
-    if (ix.PrimaryOpCode == 0xC3 || ix.PrimaryOpCode == 0xCB ||
-        ix.PrimaryOpCode == 0xC2 || ix.PrimaryOpCode == 0xCA) {
-      size_t off = (size_t) (code_ptr - func_start);
+    int is_jmp_to_instrument = is_instrumentable_jmp(
+        &ix,
+        base_addr + func_sym->st_value,
+        func_sym->st_size,
+        base_addr + func_sym->st_value + off);
+    int is_ret_to_instrument =
+      ix.Instruction == ND_INS_RETF || ix.Instruction == ND_INS_RETN;
+
+    if (is_jmp_to_instrument || is_ret_to_instrument) {
       void *addr = (void *)
-                   (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value + off);
-      verbose("instrumenting ret instruction at vaddr %p, offset in func %u\n",
-              addr, off);
+                   (base_addr + func_sym->st_value + off);
+      verbose("\tinstrumenting %s at vaddr %p, offset in func %u\n",
+          ix.Mnemonic, addr, off);
 
       struct trap_point *tp = &tp_info->arr[tp_info->num++];
       tp->addr = addr;
+      tp->type = is_ret_to_instrument ? TP_RET : TP_JMP;
       tp->value = *code_ptr;
       tp->fcn.start_addr = (void *)
-                            (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+                            (base_addr + func_sym->st_value);
       tp->fcn.len = func_sym->st_size;
       tp->is_ret = 1;
+#ifdef DEBUG_OUTPUT
+      strncpy(tp->fcn.name, elf_get_sym_name(elf_start, func_sym, strtab), sizeof(tp->fcn.name));
+      tp->fcn.name[sizeof(tp->fcn.name)-1] = '\0';
+#endif
 
       *code_ptr = INT3;
     }
@@ -209,14 +256,18 @@ static int process_func(
   }
 
   struct trap_point *tp = &tp_info->arr[tp_info->num++];
-  tp->addr = (void *) UNPACKED_BIN_LOAD_ADDR + func_sym->st_value;
+  tp->addr = (void *) base_addr + func_sym->st_value;
+  tp->type = TP_FCN_ENTRY;
   tp->value = *func_start;
   tp->fcn.start_addr = (void *)
-                        (UNPACKED_BIN_LOAD_ADDR + func_sym->st_value);
+                        (base_addr + func_sym->st_value);
   tp->fcn.len = func_sym->st_size;
   tp->is_ret = 0;
+#ifdef DEBUG_OUTPUT
+  strncpy(tp->fcn.name, elf_get_sym_name(elf_start, func_sym, strtab), sizeof(tp->fcn.name));
+  tp->fcn.name[sizeof(tp->fcn.name)-1] = '\0';
+#endif
 
-  verbose("encrypting function at %p, len %u\n", func_sym->st_value, func_sym->st_size);
   encrypt_memory_range(key, func_start, func_sym->st_size);
 
   /* Instrument entry point */
@@ -252,11 +303,28 @@ static int apply_inner_encryption(
     return -1;
   }
 
-  *tp_info = malloc(4096);
+  *tp_info = malloc(1<<30);
   (*tp_info)->num = 0;
+  uint64_t base_addr = get_base_addr((Elf64_Ehdr *) elf_start);
   ELF_FOR_EACH_SYMBOL(elf_start, sym) {
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
+
+    uint8_t *func_code_start = elf_get_sym(elf_start, sym);
+    INSTRUX ix;
+    NDSTATUS status = NdDecode(&ix, func_code_start, ND_CODE_64, ND_DATA_64);
+    if (!ND_SUCCESS(status)) {
+      fprintf(stderr, "instruction decoding failed");
+      return -1;
+    }
+
+    if (ix.Instruction == ND_INS_JMPNI ||
+        ix.Instruction == ND_INS_JMPNR ||
+        ix.Instruction == ND_INS_Jcc ||
+        ix.Instruction == ND_INS_CALLNI ||
+        ix.Instruction == ND_INS_CALLNR) { 
+      continue;
+    }
 
     /* Skip instrumenting/encrypting functions in cases where it simply will
      * not work or has the potential to mess things up. Specifically, this
@@ -279,12 +347,25 @@ static int apply_inner_encryption(
       continue;
     }
 
+    int exists = 0;
+    for (int i = 0; i < (*tp_info)->num; i++) {
+      if ((*tp_info)->arr[i].addr == base_addr + sym->st_value) {
+        verbose(
+            "skipping instrumentation of function %s as it is aliased or is an alias\n",
+            elf_get_sym_name(elf_start, sym, strtab));
+        exists = 1;
+      }
+    }
+    if (exists)
+      continue;
+
     verbose("instrumenting function %s\n",
         elf_get_sym_name(elf_start, sym, strtab));
 
-    if (process_func(elf_start, sym, *tp_info, key) == -1) {
+    if (process_func(elf_start, sym, *tp_info, key, strtab) == -1) {
       fprintf(stderr, "error instrumenting function %s\n",
               elf_get_sym_name(elf_start, sym, strtab));
+      return -1;
     }
   }
 

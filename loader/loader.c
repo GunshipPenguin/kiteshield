@@ -23,16 +23,18 @@ struct rc4_key obfuscated_key __attribute__((section(".key")));
 
 static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
 {
+  uint64_t base_addr = ((Elf64_Ehdr *) elf_start)->e_type == ET_DYN ?
+                       UNPACKED_BIN_LOAD_ADDR : 0;
+
   /* Same rounding logic as in map_load_section_from_fd, see comment below.
    * Note that we don't need a separate mmap here for bss if memsz > filesz
    * as we map an anonymous region and copy into it rather than mapping from
    * an fd (ie. we can just not touch the remaining space and it will be full
    * of zeros by default).
    */
-  void *addr = sys_mmap((void *) (UNPACKED_BIN_LOAD_ADDR +
-                                  PAGE_ALIGN_DOWN(phdr.p_vaddr)),
-                    phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
-                    PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  void *addr = sys_mmap((void *) (base_addr + PAGE_ALIGN_DOWN(phdr.p_vaddr)),
+                        phdr.p_memsz + PAGE_OFFSET(phdr.p_vaddr),
+                        PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   DIE_IF((long) addr < 0, "mmap failure");
   DEBUG_FMT("mapping LOAD section from packed binary at %p", addr);
 
@@ -142,26 +144,38 @@ static void map_interp(void *path, void **entry, void **interp_base)
   DIE_IF(sys_close(interp_fd) < 0, "could not close interpreter binary");
 }
 
-static void map_elf_from_mem(
+static void *map_elf_from_mem(
     void *elf_start,
-    void **interp_entry,
+    void **actual_entry,
     void **interp_base)
 {
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
 
+  int load_addr_set = 0;
+  void *load_addr = NULL;
+
   Elf64_Phdr *curr_phdr = elf_start + ehdr->e_phoff;
   Elf64_Phdr *interp_hdr = NULL;
   for (int i = 0; i < ehdr->e_phnum; i++) {
+    void *seg_addr = NULL;
+
     if (curr_phdr->p_type == PT_LOAD)
-      map_load_section_from_mem(elf_start, *curr_phdr);
+      seg_addr = map_load_section_from_mem(elf_start, *curr_phdr);
     else if (curr_phdr->p_type == PT_INTERP)
       interp_hdr = curr_phdr;
+
+    if (!load_addr_set && seg_addr != NULL) {
+      load_addr = seg_addr;
+      load_addr_set = 1;
+    }
 
     curr_phdr++;
   }
 
   if (interp_hdr)
-    map_interp(elf_start + interp_hdr->p_offset, interp_entry, interp_base);
+    map_interp(elf_start + interp_hdr->p_offset, actual_entry, interp_base);
+
+  return load_addr;
 }
 
 static void replace_auxv_ent(unsigned long long *auxv_start,
@@ -258,18 +272,33 @@ void *load(void *entry_stacktop)
                      packed_bin_phdr->p_memsz,
                      &actual_key);
 
-  void *interp_entry;
-  void *interp_base;
-  map_elf_from_mem(packed_bin_ehdr, &interp_entry, &interp_base);
+
+  /* Entry point for ld.so if this is a statically linked binary, otherwise
+   * map_elf_from_mem will not touch this and it will be set below. */
+  void *actual_entry = NULL;
+  void *interp_base = NULL; /* Not touched if statically linked */
+  void *load_addr =
+    map_elf_from_mem(packed_bin_ehdr, &actual_entry, &interp_base);
+
+  DEBUG_FMT("load addr is %p", load_addr);
   setup_auxv(argv,
-             (void *) (UNPACKED_BIN_LOAD_ADDR + packed_bin_ehdr->e_entry),
-             (void *) (UNPACKED_BIN_LOAD_ADDR + packed_bin_ehdr->e_phoff),
+             (void *) (load_addr + packed_bin_ehdr->e_entry),
+             (void *) (load_addr + packed_bin_ehdr->e_phoff),
              interp_base, packed_bin_ehdr->e_phnum);
 
-  DEBUG("finished mapping binary into memory");
-  DEBUG_FMT("preparing to fork and pass control in child to ld.so at %p",
-            interp_entry);
+  if (packed_bin_ehdr->e_type == ET_DYN) {
+    DEBUG("packed binary is dynamically linked, setting up auxv array");
+  } else if (packed_bin_ehdr->e_type == ET_EXEC) {
+    DEBUG("packed binary is statically linked");
+    actual_entry = (void *) packed_bin_ehdr->e_entry;
+  } else {
+    DIE_FMT("packed binary is of invalid type %d, exiting",
+        packed_bin_ehdr->e_type);
+  }
 
-  return interp_entry;
+  DEBUG("finished mapping binary into memory");
+  DEBUG_FMT("preparing to fork and pass control in child to %p", actual_entry);
+
+  return actual_entry;
 }
 

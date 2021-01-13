@@ -32,9 +32,8 @@ static struct function *get_fcn_at_addr(void *addr)
 {
   for (int i = 0; i < tp_info.num; i++) {
     struct function *curr = &tp_info.arr[i].fcn;
-    if (curr->start_addr <= addr && (curr->start_addr + curr->len) > addr) {
+    if (curr->start_addr <= addr && (curr->start_addr + curr->len) > addr)
       return curr;
-    }
   }
 
   return NULL;
@@ -78,7 +77,7 @@ static void single_step(pid_t pid)
       WSTOPSIG(wstatus));
 }
 
-static void encrypt_decrypt_fcn(
+static void rc4_xor_fcn(
     pid_t pid,
     struct function *fcn,
     struct rc4_key *key)
@@ -101,22 +100,12 @@ static void encrypt_decrypt_fcn(
     res = sys_ptrace(PTRACE_POKETEXT, pid, curr_addr, (void *) word);
     DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
 
+    res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) curr_addr, &word);
+    DIE_IF_FMT(res != 0, "PTRACE_PEEKTEXT failed with error %d", res);
+
     curr_addr += to_write;
     remaining -= to_write;
   }
-}
-
-static void *get_stack_ret_addr(pid_t pid)
-{
-  struct user_regs_struct regs;
-  long res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-  DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
-
-  long word;
-  res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) regs.sp, &word);
-  DIE_IF_FMT(res < 0, "PTRACE_PEEKTEXT failed with error %d", res);
-
-  return (void *) word;
 }
 
 static void handle_fcn_entry(
@@ -129,19 +118,10 @@ static void handle_fcn_entry(
     DIE(TRACED_MSG);
   }
 
-  DEBUG_FMT("entering function at %p, decrypting", tp->fcn.start_addr);
-
-  /* Encrypt caller if needed */
-  void *call_point_addr = get_stack_ret_addr(pid);
-  struct function *caller_fcn = get_fcn_at_addr(call_point_addr);
-  if (caller_fcn) {
-    DEBUG_FMT("encrypting caller of %p at %p",
-              tp->fcn.start_addr, caller_fcn->start_addr);
-    encrypt_decrypt_fcn(pid, caller_fcn, key);
-  }
+  DEBUG_FMT("entering function %s, decrypting", tp->fcn.name, tp->addr);
 
   /* Decrypt callee */
-  encrypt_decrypt_fcn(pid, &tp->fcn, key);
+  rc4_xor_fcn(pid, &tp->fcn, key);
   set_byte_at_addr(pid, tp->addr, tp->value);
   single_step(pid);
 }
@@ -156,8 +136,6 @@ static void handle_fcn_exit(
     DIE(TRACED_MSG);
   }
 
-  DEBUG_FMT("leaving function starting at %p from %p",
-            tp->fcn.start_addr, tp->addr);
   set_byte_at_addr(pid, tp->addr, tp->value);
   single_step(pid);
   set_byte_at_addr(pid, tp->addr, INT3);
@@ -170,21 +148,41 @@ static void handle_fcn_exit(
   long res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
 
+  struct function *returner = &tp->fcn;
   struct function *returnee = get_fcn_at_addr((void *) regs.ip);
   if (returnee && returnee->start_addr != tp->fcn.start_addr) {
-    DEBUG_FMT("encrypting function at %p since we're leaving it",
-              tp->fcn.start_addr);
-    encrypt_decrypt_fcn(pid, returnee, key);
+    DEBUG_FMT("leaving function %s via %s at %p, encrypting",
+              tp->fcn.name, tp->type == TP_JMP ? "jmp" : "ret",
+              tp->addr);
+
+    /* Encrypt returner (function we're leaving) */
+    rc4_xor_fcn(pid, returner, key);
     set_byte_at_addr(pid, tp->fcn.start_addr, INT3);
+
+    /* Decrypt returnee (function we're entering) */
+    if (tp->type == TP_JMP) {
+      DEBUG_FMT("decrypting jmp entered function %s", returnee->name);
+      rc4_xor_fcn(pid, returnee, key);
+      for (int i = 0; i < tp_info.num; i++) {
+        if (tp_info.arr[i].addr == returnee->start_addr) {
+          set_byte_at_addr(pid, returnee->start_addr, tp_info.arr[i].value);
+          break;
+        }
+      }
+    }
   }
 #ifdef DEBUG_OUTPUT
   else if (!returnee) {
     DEBUG_FMT(
-        "not encrypting function at ip=%p since we don't have a record of it",
-        regs.ip);
+        "leaving function %s via %s at %p, not decrypting target (no record)",
+        tp->fcn.name, tp->type == TP_JMP ? "jmp" : "ret", tp->addr);
+
+    /* Encrypt returner (function we're leaving) */
+    rc4_xor_fcn(pid, returner, key);
+    set_byte_at_addr(pid, tp->fcn.start_addr, INT3);
   } else {
-    DEBUG_FMT("not encrypting function at %p since it's returning to itself",
-              returnee->start_addr);
+     DEBUG_FMT("leaving function %s from %p, not encrypting (self return)",
+               tp->fcn.name, tp->addr);
   }
 #endif
 }
@@ -238,8 +236,8 @@ void runtime_start()
   for (int i = 0; i < tp_info.num; i++) {
     struct trap_point tp = tp_info.arr[i];
     DEBUG_FMT(
-        "trap point %u: value = %hhx, addr = %p",
-        i, tp.value, tp.addr);
+        "trap point %u: value = %hhx, addr = %p, function = %s",
+        i, tp.value, tp.addr, tp.fcn.name);
   }
 #endif
 

@@ -13,6 +13,8 @@ _start:
   # Start the runtime in a new thread
   call do_fork
 
+  mov $0, %rdx
+
   # Returning thread is the child, start the application in it
   pop %rbx
   jmp *%rbx

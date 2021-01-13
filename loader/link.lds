@@ -10,7 +10,7 @@ SECTIONS
    * and packed binary). Note that if this address is changed, LOADER_ADDR must
    * be updated accordingly.
    */
-  . = 0x4000b0;
+  . = 0x2000b0;
   .key : {
     *loader.o(.key)
   }

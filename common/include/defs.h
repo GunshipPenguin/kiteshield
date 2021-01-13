@@ -11,7 +11,7 @@
  * address in the linker script for the loader code must be updated
  * accordingly.
  */
-#define LOADER_ADDR 0x400000ULL
+#define LOADER_ADDR 0x200000ULL
 
 /* Address at which the packed binary is initially loaded by the kernel on
  * exec (ie. the p_vaddr field in the binary) */
@@ -34,6 +34,15 @@ struct rc4_key {
 struct function {
   void *start_addr;
   uint32_t len;
+#ifdef DEBUG_OUTPUT
+  char name[32];
+#endif
+};
+
+enum tp_type {
+  TP_FCN_ENTRY,
+  TP_JMP,
+  TP_RET,
 };
 
 /* Represents a point in code at which we injected a single byte int3
@@ -45,6 +54,8 @@ struct function {
 struct trap_point {
   /* Address in program code of this trap point */
   void *addr;
+
+  enum tp_type type;
 
   /* Byte that was overwritten by the int3, needed so we can overwrite and
    * execute the original instruction */

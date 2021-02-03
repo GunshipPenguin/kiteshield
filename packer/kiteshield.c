@@ -233,7 +233,7 @@ static int process_func(
     if (is_jmp_to_instrument || is_ret_to_instrument) {
       void *addr = (void *)
                    (base_addr + func_sym->st_value + off);
-      verbose("\tinstrumenting %s at vaddr %p, offset in func %u\n",
+      verbose("\tinstrumenting %s at vaddr %p\n",
           ix.Mnemonic, addr, off);
 
       struct trap_point *tp = &tp_info->arr[tp_info->num++];
@@ -282,7 +282,7 @@ static int apply_inner_encryption(
     struct rc4_key *key,
     struct trap_point_info **tp_info)
 {
-  verbose("attempting to apply inner encryption (per-function encryption)\n");
+  verbose("applying inner encryption (per-function encryption)\n");
   const Elf64_Ehdr *ehdr = elf_start;
 
   const Elf64_Shdr *text_shdr = elf_get_sec_by_name(elf_start, ".text");
@@ -318,40 +318,59 @@ static int apply_inner_encryption(
       return -1;
     }
 
-    if (ix.Instruction == ND_INS_JMPNI ||
-        ix.Instruction == ND_INS_JMPNR ||
-        ix.Instruction == ND_INS_Jcc ||
-        ix.Instruction == ND_INS_CALLNI ||
-        ix.Instruction == ND_INS_CALLNR) { 
-      continue;
-    }
-
     /* Skip instrumenting/encrypting functions in cases where it simply will
      * not work or has the potential to mess things up. Specifically, this
      * means we don't instrument functions that:
      *
-     *  - Are not in .text (eg. stuff in .init)
-     *  - Have an address of 0 (stuff that needs to be relocated, this should
-     *    be covered by the point above anyways, but check to be safe)
-     *  - Have a size of 0 (stuff in crtstuff.c that was compiled with
-     *    -finhibit-size-directive has a size of 0, thus we can't instrument)
-     *  - Have a size less than 2 (superset of above point). Instrumentation
-     *    requires inserting at least two int3 instructions, each of which is
-     *    one byte.
+     *  * Are not in .text (eg. stuff in .init)
+     *
+     *  * Have an address of 0 (stuff that needs to be relocated, this should
+     *  be covered by the point above anyways, but check to be safe)
+     *
+     *  * Have a size of 0 (stuff in crtstuff.c that was compiled with
+     *  -finhibit-size-directive has a size of 0, thus we can't instrument)
+     *
+     *  * Have a size less than 2 (superset of above point). Instrumentation
+     *  requires inserting at least two int3 instructions, each of which is one
+     *  byte.
+     *
+     *  * Start with an instruction that modifies control flow (ie. jmp/ret)
+     *  kiteshield instruments the start of every function AND every out of
+     *  function jmp/return, so instrumenting these would require putting two
+     *  trap points at the same address. It's theoretically possible to support
+     *  this in the runtime, but would add a large amount of complexity to it
+     *  in order to support encrypting the small amount of hand coded asm
+     *  functions in glibc that are like this.
      */
-    if (!elf_sec_contains_sym(text_shdr, sym) ||
-        sym->st_value == 0 ||
-        sym->st_size < 2) {
-      verbose("skipping instrumentation of function %s\n",
+    if (!elf_sec_contains_sym(text_shdr, sym)) {
+      verbose("not encrypting function %s as it's not in .text\n",
+              elf_get_sym_name(elf_start, sym, strtab));
+      continue;
+    } else if (sym->st_value == 0 ||
+               sym->st_size < 2) {
+      verbose(
+          "not encrypting of function %s due to its address or size\n",
+          elf_get_sym_name(elf_start, sym, strtab));
+      continue;
+    } else if (ix.Instruction == ND_INS_JMPNI ||
+               ix.Instruction == ND_INS_JMPNR ||
+               ix.Instruction == ND_INS_Jcc ||
+               ix.Instruction == ND_INS_CALLNI ||
+               ix.Instruction == ND_INS_CALLNR) {
+      verbose("not encrypting function %s due to first instruction being jmp/ret\n",
               elf_get_sym_name(elf_start, sym, strtab));
       continue;
     }
 
+    /* Statically linked binaries contain several function definitions that
+     * alias eachother (eg. _IO_vfprintf and fprintf). Detect them here as
+     * to not double-encrypt.
+     */
     int exists = 0;
     for (int i = 0; i < (*tp_info)->num; i++) {
       if ((*tp_info)->arr[i].addr == base_addr + sym->st_value) {
         verbose(
-            "skipping instrumentation of function %s as it is aliased or is an alias\n",
+            "not encrypting function %s as it is aliased or is an alias\n",
             elf_get_sym_name(elf_start, sym, strtab));
         exists = 1;
       }
@@ -359,7 +378,7 @@ static int apply_inner_encryption(
     if (exists)
       continue;
 
-    verbose("instrumenting function %s\n",
+    verbose("instrumenting and encrypting function %s\n",
         elf_get_sym_name(elf_start, sym, strtab));
 
     if (process_func(elf_start, sym, *tp_info, key, strtab) == -1) {
@@ -379,7 +398,7 @@ static int apply_outer_encryption(
     size_t packed_bin_size,
     struct rc4_key *key)
 {
-  verbose("attempting to apply outer encryption (whole-binary encryption)\n");
+  verbose("applying outer encryption (whole-binary encryption)\n");
 
   /* Encrypt the actual binary */
   encrypt_memory_range(key, packed_bin_start, packed_bin_size);
@@ -410,7 +429,7 @@ static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
 
   *new_size = sizeof(loader_x86_64) + tp_info_size;
   verbose(
-      "Injected trap point info into loader old size: %u new size: %u\n",
+      "injected trap point info into loader old size: %u bytes new size: %u bytes\n",
       sizeof(loader_x86_64), *new_size);
   return loader_tp_info;
 }
@@ -422,7 +441,7 @@ size_t full_strip(void *elf, void **new_elf)
   Elf64_Phdr *phdr_start = (Elf64_Phdr *) (((uint8_t *) elf) + ehdr->e_phoff);
   Elf64_Phdr *curr_phdr = phdr_start;
   size_t new_size = 0;
-  verbose("stripping input binary");
+  verbose("stripping input binary\n");
 
   /* Calculate minimum size needed to contain all program headers */
   for (int i = 0; i < ehdr->e_phnum; i++) {

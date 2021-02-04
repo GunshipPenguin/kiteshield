@@ -63,6 +63,7 @@ static inline int __attribute__((always_inline)) check_traced()
   int ret = sys_read(fd, buf, sizeof(buf) - 1);
   DIE_IF_FMT(ret < 0, "read failed with error %d", ret);
   buf[ret] = '\0';
+  sys_close(fd);
 
   const char *line = buf;
   char *tracerpid_field = DEOBF_STR(TRACERPID_PROC_FIELD); /* "TracerPid:" */

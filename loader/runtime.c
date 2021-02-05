@@ -207,10 +207,10 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
   DIE_IF_FMT(res < 0, "PTRACE_SETREGS failed with error %d", res);
 
   struct trap_point *tp = get_tp((void *) regs.ip);
-  if (tp->is_ret) {
-    handle_fcn_exit(pid, tp, key);
-  } else {
+  if (tp->type == TP_FCN_ENTRY) {
     handle_fcn_entry(pid, tp, key);
+  } else {
+    handle_fcn_exit(pid, tp, key);
   }
 
   if (antidebug_signal_check()) {

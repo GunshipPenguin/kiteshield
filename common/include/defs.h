@@ -63,11 +63,6 @@ struct trap_point {
 
   /* Info about function containing this trap point */
   struct function fcn;
-
-  /* 1 if this is a ret instruction, 0 if this trap point marks the start of a
-   * function (so the runtime knows whether to encrypt or decrypt respectively)
-   */
-  int is_ret : 1;
 } __attribute__((packed));
 
 struct trap_point_info {

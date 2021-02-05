@@ -245,7 +245,6 @@ static int process_func(
       tp->fcn.start_addr = (void *)
                             (base_addr + func_sym->st_value);
       tp->fcn.len = func_sym->st_size;
-      tp->is_ret = 1;
 #ifdef DEBUG_OUTPUT
       strncpy(tp->fcn.name, elf_get_sym_name(elf, func_sym), sizeof(tp->fcn.name));
       tp->fcn.name[sizeof(tp->fcn.name)-1] = '\0';
@@ -264,7 +263,6 @@ static int process_func(
   tp->fcn.start_addr = (void *)
                         (base_addr + func_sym->st_value);
   tp->fcn.len = func_sym->st_size;
-  tp->is_ret = 0;
 #ifdef DEBUG_OUTPUT
   strncpy(tp->fcn.name, elf_get_sym_name(elf, func_sym), sizeof(tp->fcn.name));
   tp->fcn.name[sizeof(tp->fcn.name)-1] = '\0';

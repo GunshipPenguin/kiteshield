@@ -39,7 +39,7 @@ struct function {
 #ifdef DEBUG_OUTPUT
   char name[32];
 #endif
-};
+} __attribute__((packed));
 
 enum tp_type {
   TP_FCN_ENTRY,

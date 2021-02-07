@@ -299,6 +299,7 @@ static int apply_inner_encryption(
   (*tp_info)->nfuncs = 0;
   (*tp_info)->ntps = 0;
 
+  /* "16 MiB ought to be enough for anybody" */
   struct function *fcn_arr;
   CK_NEQ_PERROR(fcn_arr = malloc(1<<24), NULL);
 
@@ -392,6 +393,9 @@ static int apply_inner_encryption(
 
   memcpy((*tp_info)->data, tp_arr, tp_arr_sz);
   memcpy((*tp_info)->data + tp_arr_sz, fcn_arr, fcn_arr_sz);
+
+  free(tp_arr);
+  free(fcn_arr);
 
   return 0;
 }

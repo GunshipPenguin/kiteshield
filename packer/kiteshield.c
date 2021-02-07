@@ -209,10 +209,20 @@ static int process_func(
     struct mapped_elf *elf,
     Elf64_Sym *func_sym,
     struct trap_point_info *tp_info,
+    struct function *func_arr,
+    struct trap_point *tp_arr,
     struct rc4_key *key)
 {
   uint8_t *func_start = elf_get_sym_location(elf, func_sym);
   uint64_t base_addr = get_base_addr(elf->ehdr);
+  struct function *fcn = &func_arr[tp_info->nfuncs];
+
+  fcn->start_addr = (void *) (base_addr + func_sym->st_value);
+  fcn->len = func_sym->st_size;
+#ifdef DEBUG_OUTPUT
+  strncpy(fcn->name, elf_get_sym_name(elf, func_sym), sizeof(fcn->name));
+  fcn->name[sizeof(fcn->name) - 1] = '\0';
+#endif
 
   uint8_t *code_ptr = func_start;
   while (code_ptr < func_start + func_sym->st_size) {
@@ -238,40 +248,31 @@ static int process_func(
       verbose("\tinstrumenting %s at vaddr %p\n",
           ix.Mnemonic, addr, off);
 
-      struct trap_point *tp = &tp_info->arr[tp_info->num++];
+      struct trap_point *tp =
+        (struct trap_point *) &tp_arr[tp_info->ntps++];
       tp->addr = addr;
       tp->type = is_ret_to_instrument ? TP_RET : TP_JMP;
       tp->value = *code_ptr;
-      tp->fcn.start_addr = (void *)
-                            (base_addr + func_sym->st_value);
-      tp->fcn.len = func_sym->st_size;
-#ifdef DEBUG_OUTPUT
-      strncpy(tp->fcn.name, elf_get_sym_name(elf, func_sym), sizeof(tp->fcn.name));
-      tp->fcn.name[sizeof(tp->fcn.name)-1] = '\0';
-#endif
-
+      tp->fcn_i = tp_info->nfuncs;
       *code_ptr = INT3;
     }
 
     code_ptr += ix.Length;
   }
 
-  struct trap_point *tp = &tp_info->arr[tp_info->num++];
+  /* Instrument entry point */
+  struct trap_point *tp =
+    (struct trap_point *) &tp_arr[tp_info->ntps++];
   tp->addr = (void *) base_addr + func_sym->st_value;
   tp->type = TP_FCN_ENTRY;
   tp->value = *func_start;
-  tp->fcn.start_addr = (void *)
-                        (base_addr + func_sym->st_value);
-  tp->fcn.len = func_sym->st_size;
-#ifdef DEBUG_OUTPUT
-  strncpy(tp->fcn.name, elf_get_sym_name(elf, func_sym), sizeof(tp->fcn.name));
-  tp->fcn.name[sizeof(tp->fcn.name)-1] = '\0';
-#endif
+  tp->fcn_i = tp_info->nfuncs;
 
   encrypt_memory_range(key, func_start, func_sym->st_size);
 
-  /* Instrument entry point */
   *func_start = INT3;
+
+  tp_info->nfuncs++;
 
   return 0;
 }
@@ -294,8 +295,16 @@ static int apply_inner_encryption(
     return -1;
   }
 
-  *tp_info = malloc(1<<30);
-  (*tp_info)->num = 0;
+  CK_NEQ_PERROR(*tp_info = malloc(sizeof(**tp_info)), NULL);
+  (*tp_info)->nfuncs = 0;
+  (*tp_info)->ntps = 0;
+
+  struct function *fcn_arr;
+  CK_NEQ_PERROR(fcn_arr = malloc(1<<24), NULL);
+
+  struct trap_point *tp_arr;
+  CK_NEQ_PERROR(tp_arr = malloc(1<<24), NULL);
+
   ELF_FOR_EACH_SYMBOL(elf, sym) {
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
@@ -367,12 +376,22 @@ static int apply_inner_encryption(
     verbose("instrumenting and encrypting function %s\n",
         elf_get_sym_name(elf, sym));
 
-    if (process_func(elf, sym, *tp_info, key) == -1) {
+    if (process_func(elf, sym, *tp_info, fcn_arr, tp_arr, key) == -1) {
       fprintf(stderr, "error instrumenting function %s\n",
               elf_get_sym_name(elf, sym));
       return -1;
     }
   }
+
+  size_t tp_arr_sz = sizeof(struct trap_point) * (*tp_info)->ntps;
+  size_t fcn_arr_sz = sizeof(struct function) * (*tp_info)->nfuncs;
+  CK_NEQ_PERROR(
+      *tp_info = realloc(*tp_info,
+              sizeof(struct trap_point_info) + tp_arr_sz + fcn_arr_sz),
+      NULL);
+
+  memcpy((*tp_info)->data, tp_arr, tp_arr_sz);
+  memcpy((*tp_info)->data + tp_arr_sz, fcn_arr, fcn_arr_sz);
 
   return 0;
 }
@@ -401,7 +420,8 @@ static int apply_outer_encryption(
 static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
 {
   size_t tp_info_size = sizeof(struct trap_point_info) +
-                    sizeof(struct trap_point) * tp_info->num;
+                        sizeof(struct trap_point) * tp_info->ntps +
+                        sizeof(struct function) * tp_info->nfuncs;
   void *loader_tp_info = malloc(sizeof(loader_x86_64) + tp_info_size);
 
   memcpy(loader_tp_info, loader_x86_64, sizeof(loader_x86_64));

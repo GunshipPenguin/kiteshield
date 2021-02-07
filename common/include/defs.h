@@ -34,6 +34,8 @@ struct rc4_key {
 struct function {
   void *start_addr;
   uint32_t len;
+
+/* For logging purposes in debug mode */
 #ifdef DEBUG_OUTPUT
   char name[32];
 #endif
@@ -55,19 +57,22 @@ struct trap_point {
   /* Address in program code of this trap point */
   void *addr;
 
+  /* Trap point type, either a function entry, jmp that potentially leaves its
+   * containing function, or ret */
   enum tp_type type;
 
   /* Byte that was overwritten by the int3, needed so we can overwrite and
    * execute the original instruction */
   uint8_t value;
 
-  /* Info about function containing this trap point */
-  struct function fcn;
+  /* Index into the function array for the containing function */
+  int fcn_i;
 } __attribute__((packed));
 
 struct trap_point_info {
-  int num;
-  struct trap_point arr[];
+  int nfuncs;
+  int ntps;
+  uint8_t data[];
 } __attribute__((packed));
 
 #endif /* __KITESHIELD_DEFS_H */

@@ -8,30 +8,31 @@
 #include "loader/include/key_deobfuscation.h"
 #include "loader/include/anti_debug.h"
 
+#define FCN_ARR_START ((struct function *) (((struct trap_point *) tp_info.data) + tp_info.ntps))
+#define FCN(tp) ((struct function *) (FCN_ARR_START + tp->fcn_i))
+
 struct trap_point_info tp_info __attribute__((section(".tp_info")));
 
 /* Defined in loader.c */
 extern struct rc4_key obfuscated_key;
 
 struct trap_point *get_tp(void *addr) {
-  struct trap_point *tp;
-  int i = 0;
-  for (; i < tp_info.num; i++) {
-    if (tp_info.arr[i].addr == addr) {
-      tp = &tp_info.arr[i];
-      break;
+  struct trap_point *arr = (struct trap_point *) tp_info.data;
+  for (int i = 0; i < tp_info.ntps; i++) {
+    if (arr[i].addr == addr) {
+      return &arr[i];
     }
   }
 
-  DIE_IF_FMT(i == tp_info.num,
-             "could not find trap point at %p, exiting", addr);
-  return tp;
+  return NULL;
 }
 
 static struct function *get_fcn_at_addr(void *addr)
 {
-  for (int i = 0; i < tp_info.num; i++) {
-    struct function *curr = &tp_info.arr[i].fcn;
+  struct function *arr = FCN_ARR_START;
+
+  for (int i = 0; i < tp_info.nfuncs; i++) {
+    struct function *curr = &arr[i];
     if (curr->start_addr <= addr && (curr->start_addr + curr->len) > addr)
       return curr;
   }
@@ -118,10 +119,10 @@ static void handle_fcn_entry(
     DIE(TRACED_MSG);
   }
 
-  DEBUG_FMT("entering function %s, decrypting", tp->fcn.name, tp->addr);
+  DEBUG_FMT("entering function %s, decrypting", FCN(tp)->name, tp->addr);
 
   /* Decrypt callee */
-  rc4_xor_fcn(pid, &tp->fcn, key);
+  rc4_xor_fcn(pid, FCN(tp), key);
   set_byte_at_addr(pid, tp->addr, tp->value);
   single_step(pid);
 }
@@ -140,49 +141,48 @@ static void handle_fcn_exit(
   single_step(pid);
   set_byte_at_addr(pid, tp->addr, INT3);
 
-  /* We've now executed the ret instruction, if we're still in the same
-   * function (ie. recursion), don't do anything, otherwise, encrypt the
-   * function we've returned from.
+  /* We've now executed the ret or jmp instruction, if we're still in the same
+   * function (which either means returning from a recursive call for a ret or
+   * an in-function jmp), don't do anything. Otherwise, encrypt the function
+   * we've just returned from.
    */
   struct user_regs_struct regs;
   long res = sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
 
-  struct function *returner = &tp->fcn;
-  struct function *returnee = get_fcn_at_addr((void *) regs.ip);
-  if (returnee && returnee->start_addr != tp->fcn.start_addr) {
-    DEBUG_FMT("leaving function %s via %s at %p, encrypting",
-              tp->fcn.name, tp->type == TP_JMP ? "jmp" : "ret",
+  struct function *prev_fcn = FCN(tp);
+  struct function *new_fcn = get_fcn_at_addr((void *) regs.ip);
+  if (new_fcn != NULL && new_fcn != prev_fcn) {
+    DEBUG_FMT("leaving function %s for %s via %s at %p, encrypting",
+              prev_fcn->name, new_fcn->name, tp->type == TP_JMP ? "jmp" : "ret",
               tp->addr);
 
-    /* Encrypt returner (function we're leaving) */
-    rc4_xor_fcn(pid, returner, key);
-    set_byte_at_addr(pid, tp->fcn.start_addr, INT3);
+    /* Encrypt prev_fcn (function we're leaving) */
+    rc4_xor_fcn(pid, prev_fcn, key);
+    set_byte_at_addr(pid, prev_fcn->start_addr, INT3);
 
-    /* Decrypt returnee (function we're entering) */
+    /* If we're entering a function via an out-of-function jmp, we assume it's
+     * not in the current call stack, and thus we must decrypt it. */
     if (tp->type == TP_JMP) {
-      DEBUG_FMT("decrypting jmp entered function %s", returnee->name);
-      rc4_xor_fcn(pid, returnee, key);
-      for (int i = 0; i < tp_info.num; i++) {
-        if (tp_info.arr[i].addr == returnee->start_addr) {
-          set_byte_at_addr(pid, returnee->start_addr, tp_info.arr[i].value);
-          break;
-        }
-      }
+      rc4_xor_fcn(pid, new_fcn, key);
+      struct trap_point *new_fcn_tp = get_tp(new_fcn->start_addr);
+      if (new_fcn_tp != NULL)
+        set_byte_at_addr(pid, new_fcn->start_addr, new_fcn_tp->value);
     }
+  } else if (!new_fcn) {
+    DEBUG_FMT(
+        "leaving function %s via %s at %p, not decrypting new function at %p (no record)",
+        prev_fcn->name, tp->type == TP_JMP ? "jmp" : "ret", tp->addr, regs.ip);
+
+    /* Encrypt prev_fcn (function we're leaving) */
+    rc4_xor_fcn(pid, prev_fcn, key);
+    set_byte_at_addr(pid, prev_fcn->start_addr, INT3);
   }
 #ifdef DEBUG_OUTPUT
-  else if (!returnee) {
-    DEBUG_FMT(
-        "leaving function %s via %s at %p, not decrypting target (no record)",
-        tp->fcn.name, tp->type == TP_JMP ? "jmp" : "ret", tp->addr);
-
-    /* Encrypt returner (function we're leaving) */
-    rc4_xor_fcn(pid, returner, key);
-    set_byte_at_addr(pid, tp->fcn.start_addr, INT3);
-  } else {
-     DEBUG_FMT("leaving function %s from %p, not encrypting (self return)",
-               tp->fcn.name, tp->addr);
+  else {
+     DEBUG_FMT("hit trap point in %s at %p, but did not leave function (now at %p) (%s), continuing",
+               prev_fcn->name, tp->addr, regs.ip,
+               tp->type == TP_JMP ? "internal jmp" : "recursive return");
   }
 #endif
 }
@@ -225,7 +225,8 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 void runtime_start()
 {
   DEBUG("starting ptrace runtime");
-  DEBUG_FMT("number of trap points: %u", tp_info.num);
+  DEBUG_FMT("number of trap points: %u", tp_info.ntps);
+  DEBUG_FMT("number of encrypted functions: %u", tp_info.nfuncs);
 
   struct rc4_key actual_key;
   loader_key_deobfuscate(&obfuscated_key, &actual_key);
@@ -233,11 +234,12 @@ void runtime_start()
   signal_antidebug_init();
 
 #ifdef DEBUG_OUTPUT
-  for (int i = 0; i < tp_info.num; i++) {
-    struct trap_point tp = tp_info.arr[i];
-    DEBUG_FMT(
-        "trap point %u: value = %hhx, addr = %p, function = %s",
-        i, tp.value, tp.addr, tp.fcn.name);
+  DEBUG("list of trap points:");
+  for (int i = 0; i < tp_info.ntps; i++) {
+    struct trap_point *tp = ((struct trap_point *) tp_info.data) + i;
+    const char *type = tp->type == TP_JMP ? "jmp" : tp->type == TP_RET ? "ret" : "ent";
+    DEBUG_FMT("%p value: %hhx, type: %s function: %s",
+              tp->addr, tp->value, type, FCN(tp)->name);
   }
 #endif
 

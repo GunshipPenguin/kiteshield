@@ -226,8 +226,7 @@ static int process_func(
     Elf64_Sym *func_sym,
     struct trap_point_info *tp_info,
     struct function *func_arr,
-    struct trap_point *tp_arr,
-    struct rc4_key *key)
+    struct trap_point *tp_arr)
 {
   uint8_t *func_start = elf_get_sym_location(elf, func_sym);
   uint64_t base_addr = get_base_addr(elf->ehdr);
@@ -302,7 +301,6 @@ static int process_func(
  */
 static int apply_inner_encryption(
     struct mapped_elf *elf,
-    struct rc4_key *key,
     struct trap_point_info **tp_info)
 {
   verbose("applying inner encryption (per-function encryption)\n");
@@ -400,7 +398,7 @@ static int apply_inner_encryption(
     verbose("instrumenting and encrypting function %s\n",
         elf_get_sym_name(elf, sym));
 
-    if (process_func(elf, sym, *tp_info, fcn_arr, tp_arr, key) == -1) {
+    if (process_func(elf, sym, *tp_info, fcn_arr, tp_arr) == -1) {
       fprintf(stderr, "error instrumenting function %s\n",
               elf_get_sym_name(elf, sym));
       return -1;
@@ -572,21 +570,12 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  /* Generate key */
-  struct rc4_key key;
-  CK_NEQ_PERROR(getrandom(key.bytes, sizeof(key.bytes), 0), -1);
-  verbose("using key ");
-  for (int i = 0; i < sizeof(key.bytes); i++) {
-    verbose("%02hhx ", key.bytes[i]);
-  }
-  verbose("for RC4 encryption\n");
-
   /* Apply inner encryption if requested */
   size_t loader_tp_info_size = sizeof(loader_x86_64);
   void *loader_tp_info = loader_x86_64;
   if (use_inner_encryption) {
     struct trap_point_info *tp_info = NULL;
-    ret = apply_inner_encryption(&elf, &key, &tp_info);
+    ret = apply_inner_encryption(&elf, &tp_info);
     if (ret == -1) {
       fprintf(stderr, "could not apply inner encryption\n");
       return -1;
@@ -601,6 +590,15 @@ int main(int argc, char *argv[])
     fprintf(stderr, "could not strip binary");
     return -1;
   }
+
+  /* Generate key */
+  struct rc4_key key;
+  CK_NEQ_PERROR(getrandom(key.bytes, sizeof(key.bytes), 0), -1);
+  verbose("using key ");
+  for (int i = 0; i < sizeof(key.bytes); i++) {
+    verbose("%02hhx ", key.bytes[i]);
+  }
+  verbose("for RC4 encryption\n");
 
   /* Apply outer encryption */
   ret = apply_outer_encryption(&elf, loader_tp_info, loader_tp_info_size, &key);

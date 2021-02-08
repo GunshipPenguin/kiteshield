@@ -259,9 +259,12 @@ void runtime_start()
     pid_t pid = sys_wait4(&wstatus);
 
     DIE_IF_FMT(pid == -1, "wait4 syscall failed with error %d", pid);
-    DIE_IF_FMT(
-        WIFEXITED(wstatus),
-        "child exited with status %u", WEXITSTATUS(wstatus));
+
+    if (WIFEXITED(wstatus)) {
+      DEBUG_FMT("child exited with status %u", WEXITSTATUS(wstatus));
+      sys_exit(WEXITSTATUS(wstatus));
+    }
+
     DIE_IF_FMT(
         WIFSIGNALED(wstatus),
         "child was killed by signal, %u exiting", WTERMSIG(wstatus));

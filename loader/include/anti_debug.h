@@ -21,7 +21,10 @@ static const char *nextline(const char *curr_line)
   return NULL; /* EOF */
 }
 
-/* Always inline this function so that a reverse engineer doesn't have to
+/* Check the TracerPid field in /proc/<pid>/status to verify we're not being
+ * ptraced.
+ *
+ * Always inline this function so that a reverse engineer doesn't have to
  * simply neuter a single function in the compiled code to defeat calls to it
  * everywhere. */
 static inline int __attribute__((always_inline)) check_traced()
@@ -86,7 +89,14 @@ static inline int __attribute__((always_inline)) check_traced()
   return 1;
 }
 
-/* Always inline antidebug_signal_check() for the same reasons as
+/* Delivers a SIGTRAP to ourself by executing an int3. This should be picked up
+ * by the signal handler registered with signal_antidebug_init, which
+ * increments the global sigtrap_counter by one. If we're running under gdb and
+ * the reverse engineer has not explicitly configured GDB to pass the SIGTRAP
+ * onto the debugged program, the signal handler won't be invoked, and thus the
+ * global won't be incremented, telling us we're being debugged.
+ *
+ * Always inline antidebug_signal_check() for the same reasons as
  * check_traced() above. */
 extern int sigtrap_counter;
 static inline int __attribute__((always_inline)) antidebug_signal_check()

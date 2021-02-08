@@ -5,6 +5,8 @@
 
 #include "loader/include/types.h"
 
+/* Convenience wrapper around obf_deobf_key to automatically pass in correct
+ * loader code offsets. */
 void loader_key_deobfuscate(struct rc4_key *old_key, struct rc4_key *new_key) {
   /* "our" EHDR (ie. the one in the on-disk binary that was run) */
   Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) LOADER_ADDR;

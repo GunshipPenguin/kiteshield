@@ -6,6 +6,11 @@
 
 #define KITESHIELD_PREFIX "[kiteshield] "
 
+/* Yes this would likely be simpler if minimal_printf implemented a width
+ * specifier, but introducing all that extra complexity to it just for this one
+ * use (printing keys) isn't really of any value. Better to just special case
+ * it here.
+ */
 #define STRINGIFY_KEY(key) \
   ({ char buf[(sizeof((key)->bytes) * 2) + 1]; \
      char *buf_ptr = buf; \

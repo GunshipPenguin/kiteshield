@@ -427,17 +427,24 @@ static int apply_inner_encryption(
 static int apply_outer_encryption(
     struct mapped_elf *elf,
     void *loader_start,
-    size_t loader_size,
-    struct rc4_key *key)
+    size_t loader_size)
 {
   verbose("applying outer encryption (whole-binary encryption)\n");
 
+  struct rc4_key key;
+  CK_NEQ_PERROR(getrandom(key.bytes, sizeof(key.bytes), 0), -1);
+  verbose("using key ");
+  for (int i = 0; i < sizeof(key.bytes); i++) {
+    verbose("%02hhx ", key.bytes[i]);
+  }
+  verbose("for outer encryption\n");
+
   /* Encrypt the actual binary */
-  encrypt_memory_range(key, elf->start, elf->size);
+  encrypt_memory_range(&key, elf->start, elf->size);
 
   /* Obfuscate Key */
   struct rc4_key obfuscated_key;
-  obf_deobf_key(key, &obfuscated_key, loader_start, loader_size);
+  obf_deobf_key(&key, &obfuscated_key, loader_start, loader_size);
 
   /* Copy over obfuscated key so the loader can decrypt */
   *((struct rc4_key *) loader_start) = obfuscated_key;
@@ -591,17 +598,8 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  /* Generate key */
-  struct rc4_key key;
-  CK_NEQ_PERROR(getrandom(key.bytes, sizeof(key.bytes), 0), -1);
-  verbose("using key ");
-  for (int i = 0; i < sizeof(key.bytes); i++) {
-    verbose("%02hhx ", key.bytes[i]);
-  }
-  verbose("for RC4 encryption\n");
-
   /* Apply outer encryption */
-  ret = apply_outer_encryption(&elf, loader_tp_info, loader_tp_info_size, &key);
+  ret = apply_outer_encryption(&elf, loader_tp_info, loader_tp_info_size);
   if (ret == -1) {
     fprintf(stderr, "could not apply outer encryption");
     return -1;

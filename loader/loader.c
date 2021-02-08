@@ -223,13 +223,7 @@ static void decrypt_packed_bin(
   struct rc4_state rc4;
   rc4_init(&rc4, key->bytes, sizeof(key->bytes));
 
-#ifdef DEBUG_OUTPUT
-  minimal_printf(1, KITESHIELD_PREFIX "RC4 decrypting binary with key ");
-  for (int i = 0; i < KEY_SIZE; i++) {
-    minimal_printf(1, "%hhx ", key->bytes[i]);
-  }
-  minimal_printf(1, "\n");
-#endif
+  DEBUG_FMT("RC4 decrypting binary with key %s", STRINGIFY_KEY(key));
 
   unsigned char *curr = packed_bin_start;
   for (int i = 0; i < packed_bin_size; i++) {

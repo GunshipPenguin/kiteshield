@@ -6,6 +6,23 @@
 
 #define KITESHIELD_PREFIX "[kiteshield] "
 
+#define STRINGIFY_KEY(key) \
+  ({ char buf[(sizeof((key)->bytes) * 2) + 1]; \
+     char *buf_ptr = buf; \
+     for (int i = 0; i < KEY_SIZE; i++) { \
+       uint8_t byte = (key)->bytes[i]; \
+       if ((byte & 0xF0) == 0) { \
+         (*buf_ptr++) = '0'; \
+         itoa((key)->bytes[i], 0, buf_ptr, 8, 16); \
+         buf_ptr ++; \
+       } else { \
+         itoa((key)->bytes[i], 0, buf_ptr, 8, 16); \
+         buf_ptr += 2; \
+       } \
+     }; \
+     buf[sizeof((key)->bytes) * 2] = '\0'; \
+     buf; }) \
+
 #ifdef DEBUG_OUTPUT
 #define DEBUG(fmtstr) minimal_printf(1, KITESHIELD_PREFIX fmtstr "\n")
 #else

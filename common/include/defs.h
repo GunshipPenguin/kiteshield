@@ -35,6 +35,9 @@ struct function {
   void *start_addr;
   uint32_t len;
 
+  /* Key that this function's code is encrypted with */
+  struct rc4_key key;
+
 /* For logging purposes in debug mode */
 #ifdef DEBUG_OUTPUT
   char name[32];

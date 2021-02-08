@@ -219,6 +219,7 @@ static int process_func(
 
   fcn->start_addr = (void *) (base_addr + func_sym->st_value);
   fcn->len = func_sym->st_size;
+  CK_NEQ_PERROR(getrandom(fcn->key.bytes, sizeof(fcn->key.bytes), 0), -1);
 #ifdef DEBUG_OUTPUT
   strncpy(fcn->name, elf_get_sym_name(elf, func_sym), sizeof(fcn->name));
   fcn->name[sizeof(fcn->name) - 1] = '\0';
@@ -268,7 +269,7 @@ static int process_func(
   tp->value = *func_start;
   tp->fcn_i = tp_info->nfuncs;
 
-  encrypt_memory_range(key, func_start, func_sym->st_size);
+  encrypt_memory_range(&fcn->key, func_start, func_sym->st_size);
 
   *func_start = INT3;
 

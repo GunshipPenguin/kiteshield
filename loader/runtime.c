@@ -80,11 +80,10 @@ static void single_step(pid_t pid)
 
 static void rc4_xor_fcn(
     pid_t pid,
-    struct function *fcn,
-    struct rc4_key *key)
+    struct function *fcn)
 {
   struct rc4_state rc4;
-  rc4_init(&rc4, key->bytes, sizeof(key->bytes));
+  rc4_init(&rc4, fcn->key.bytes, sizeof(fcn->key.bytes));
 
   uint8_t *curr_addr = fcn->start_addr;
   size_t remaining = fcn->len;
@@ -118,11 +117,13 @@ static void handle_fcn_entry(
     sys_kill(pid, SIGKILL);
     DIE(TRACED_MSG);
   }
+  struct function *fcn = FCN(tp);
 
-  DEBUG_FMT("entering function %s, decrypting", FCN(tp)->name, tp->addr);
+  DEBUG_FMT("entering function %s, decrypting with key %s", fcn->name,
+      STRINGIFY_KEY(&fcn->key));
 
   /* Decrypt callee */
-  rc4_xor_fcn(pid, FCN(tp), key);
+  rc4_xor_fcn(pid, fcn);
   set_byte_at_addr(pid, tp->addr, tp->value);
   single_step(pid);
 }
@@ -153,18 +154,18 @@ static void handle_fcn_exit(
   struct function *prev_fcn = FCN(tp);
   struct function *new_fcn = get_fcn_at_addr((void *) regs.ip);
   if (new_fcn != NULL && new_fcn != prev_fcn) {
-    DEBUG_FMT("leaving function %s for %s via %s at %p, encrypting",
+    DEBUG_FMT("leaving function %s for %s via %s at %p, encrypting with key %s",
               prev_fcn->name, new_fcn->name, tp->type == TP_JMP ? "jmp" : "ret",
-              tp->addr);
+              tp->addr, STRINGIFY_KEY(&prev_fcn->key));
 
     /* Encrypt prev_fcn (function we're leaving) */
-    rc4_xor_fcn(pid, prev_fcn, key);
+    rc4_xor_fcn(pid, prev_fcn);
     set_byte_at_addr(pid, prev_fcn->start_addr, INT3);
 
     /* If we're entering a function via an out-of-function jmp, we assume it's
      * not in the current call stack, and thus we must decrypt it. */
     if (tp->type == TP_JMP) {
-      rc4_xor_fcn(pid, new_fcn, key);
+      rc4_xor_fcn(pid, new_fcn);
       struct trap_point *new_fcn_tp = get_tp(new_fcn->start_addr);
       if (new_fcn_tp != NULL)
         set_byte_at_addr(pid, new_fcn->start_addr, new_fcn_tp->value);
@@ -175,7 +176,7 @@ static void handle_fcn_exit(
         prev_fcn->name, tp->type == TP_JMP ? "jmp" : "ret", tp->addr, regs.ip);
 
     /* Encrypt prev_fcn (function we're leaving) */
-    rc4_xor_fcn(pid, prev_fcn, key);
+    rc4_xor_fcn(pid, prev_fcn);
     set_byte_at_addr(pid, prev_fcn->start_addr, INT3);
   }
 #ifdef DEBUG_OUTPUT

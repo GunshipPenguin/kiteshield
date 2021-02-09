@@ -237,7 +237,7 @@ static void decrypt_packed_bin(
 /* Load the packed binary, returns the address to hand control to when done */
 void *load(void *entry_stacktop)
 {
-  if (check_traced())
+  if (antidebug_proc_check_traced())
     DIE(TRACED_MSG);
 
   /* Disable core dumps via rlimit here before we start doing sensitive stuff

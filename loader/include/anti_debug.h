@@ -27,7 +27,7 @@ static const char *nextline(const char *curr_line)
  * Always inline this function so that a reverse engineer doesn't have to
  * simply neuter a single function in the compiled code to defeat calls to it
  * everywhere. */
-static inline int __attribute__((always_inline)) check_traced()
+static inline int __attribute__((always_inline)) antidebug_proc_check_traced()
 {
 #ifdef NO_ANTIDEBUG
   return 0;
@@ -132,8 +132,8 @@ antidebug_rlimit_set_zero_core()
   DIE_IF_FMT(ret != 0, "rlimit(RLIMIT_CORE, {0, 0}) failed with %d", ret);
 }
 
-void signal_antidebug_init();
-void antidebug_set_nondumpable();
+void antidebug_signal_init();
+void antidebug_prctl_set_nondumpable();
 
 #endif /* __KITESHIELD_ANTI_DEBUG_H */
 

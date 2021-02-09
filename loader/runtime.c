@@ -113,7 +113,7 @@ static void handle_fcn_entry(
     struct trap_point *tp,
     struct rc4_key *key)
 {
-  if (check_traced()) {
+  if (antidebug_proc_check_traced()) {
     sys_kill(pid, SIGKILL);
     DIE(TRACED_MSG);
   }
@@ -133,7 +133,7 @@ static void handle_fcn_exit(
     struct trap_point *tp,
     struct rc4_key *key)
 {
-  if (check_traced()) {
+  if (antidebug_proc_check_traced()) {
     sys_kill(pid, SIGKILL);
     DIE(TRACED_MSG);
   }
@@ -190,7 +190,7 @@ static void handle_fcn_exit(
 
 static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 {
-  if (check_traced()) {
+  if (antidebug_proc_check_traced()) {
     sys_kill(pid, SIGKILL);
     DIE(TRACED_MSG);
   }
@@ -232,7 +232,7 @@ void runtime_start()
   struct rc4_key actual_key;
   loader_key_deobfuscate(&obfuscated_key, &actual_key);
 
-  signal_antidebug_init();
+  antidebug_signal_init();
 
 #ifdef DEBUG_OUTPUT
   DEBUG("list of trap points:");
@@ -247,12 +247,13 @@ void runtime_start()
   /* debugger checks are scattered throughout the runtime to interfere with
    * debugger attaches as much as possible.
    */
-  if (check_traced())
+  if (antidebug_proc_check_traced())
     DIE(TRACED_MSG);
 
   /* Do the prctl down here so a reverse engineer will have to defeat the
-   * preceeding check_traced() call before prctl shows up in a strace */
-  antidebug_set_nondumpable();
+   * preceeding antidebug_proc_check_traced() call before prctl shows up in a
+   * strace */
+  antidebug_prctl_set_nondumpable();
 
   while (1) {
     int wstatus;
@@ -276,7 +277,7 @@ void runtime_start()
         "child was stopped by unexpected signal %u, exiting",
         WSTOPSIG(wstatus));
 
-    if (check_traced()) {
+    if (antidebug_proc_check_traced()) {
       sys_kill(pid, SIGKILL);
       DIE(TRACED_MSG);
     }
@@ -292,7 +293,7 @@ void runtime_start()
 
 void do_fork(void *entry)
 {
-  if (check_traced())
+  if (antidebug_proc_check_traced())
     DIE(TRACED_MSG);
 
   pid_t ret = sys_fork();

@@ -9,7 +9,7 @@ void sigtrap_handler(int sig)
   sigtrap_counter++;
 }
 
-void signal_antidebug_init()
+void antidebug_signal_init()
 {
   struct kernel_sigaction sa;
   sa.sa_mask = ~0UL;
@@ -21,7 +21,7 @@ void signal_antidebug_init()
   DIE_IF_FMT(res < 0, "rt_sigaction failed with errro %d", res);
 }
 
-void antidebug_set_nondumpable()
+void antidebug_prctl_set_nondumpable()
 {
 #ifdef NO_ANTIDEBUG
   return;

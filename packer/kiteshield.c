@@ -463,7 +463,7 @@ static int apply_outer_encryption(
 
   /* Obfuscate Key */
   struct rc4_key obfuscated_key;
-  obf_deobf_key(&key, &obfuscated_key, loader_start, loader_size);
+  obf_deobf_outer_key(&key, &obfuscated_key, loader_start, loader_size);
 
   /* Copy over obfuscated key so the loader can decrypt */
   *((struct rc4_key *) loader_start) = obfuscated_key;

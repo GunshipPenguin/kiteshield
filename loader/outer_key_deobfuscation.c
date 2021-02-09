@@ -5,9 +5,12 @@
 
 #include "loader/include/types.h"
 
-/* Convenience wrapper around obf_deobf_key to automatically pass in correct
- * loader code offsets. */
-void loader_key_deobfuscate(struct rc4_key *old_key, struct rc4_key *new_key) {
+/* Convenience wrapper around obf_deobf_outer_key to automatically pass in
+ * correct loader code offsets. */
+void loader_outer_key_deobfuscate(
+    struct rc4_key *old_key,
+    struct rc4_key *new_key)
+{
   /* "our" EHDR (ie. the one in the on-disk binary that was run) */
   Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) LOADER_ADDR;
 
@@ -22,6 +25,6 @@ void loader_key_deobfuscate(struct rc4_key *old_key, struct rc4_key *new_key) {
   void *loader_start = (void *) loader_phdr->p_vaddr + hdr_adjust;
   size_t loader_size = loader_phdr->p_memsz - hdr_adjust;
 
-  obf_deobf_key(old_key, new_key, loader_start, loader_size);
+  obf_deobf_outer_key(old_key, new_key, loader_start, loader_size);
 }
 

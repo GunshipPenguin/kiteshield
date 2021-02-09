@@ -8,7 +8,7 @@
 #include "loader/include/debug.h"
 #include "loader/include/elf_auxv.h"
 #include "loader/include/syscalls.h"
-#include "loader/include/key_deobfuscation.h"
+#include "loader/include/outer_key_deobfuscation.h"
 #include "loader/include/anti_debug.h"
 
 #define PAGE_SHIFT 12
@@ -266,7 +266,7 @@ void *load(void *entry_stacktop)
   Elf64_Ehdr *packed_bin_ehdr = (Elf64_Ehdr *) (packed_bin_phdr->p_vaddr);
 
   struct rc4_key actual_key;
-  loader_key_deobfuscate(&obfuscated_key, &actual_key);
+  loader_outer_key_deobfuscate(&obfuscated_key, &actual_key);
 
   decrypt_packed_bin((void *) packed_bin_phdr->p_vaddr,
                      packed_bin_phdr->p_memsz,

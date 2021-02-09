@@ -5,7 +5,7 @@
 #include "loader/include/debug.h"
 #include "loader/include/syscalls.h"
 #include "loader/include/signal.h"
-#include "loader/include/key_deobfuscation.h"
+#include "loader/include/outer_key_deobfuscation.h"
 #include "loader/include/anti_debug.h"
 
 #define FCN_ARR_START ((struct function *) (((struct trap_point *) tp_info.data) + tp_info.ntps))
@@ -230,7 +230,7 @@ void runtime_start()
   DEBUG_FMT("number of encrypted functions: %u", tp_info.nfuncs);
 
   struct rc4_key actual_key;
-  loader_key_deobfuscate(&obfuscated_key, &actual_key);
+  loader_outer_key_deobfuscate(&obfuscated_key, &actual_key);
 
   antidebug_signal_init();
 

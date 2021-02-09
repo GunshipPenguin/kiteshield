@@ -303,6 +303,9 @@ void do_fork(void *entry)
     sys_exit(0); /* Only the child returns from do_clone */
   }
 
+  /* Just in case the earlier one in load() was patched out :) */
+  antidebug_rlimit_set_zero_core();
+
   ret = sys_ptrace(PTRACE_TRACEME, 0, NULL, NULL);
   DIE_IF_FMT(ret < 0, "child: PTRACE_TRACEME failed with error %d", ret);
 

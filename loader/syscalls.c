@@ -276,3 +276,18 @@ int sys_stat(const char *pathname, struct stat *statbuf)
   return ret;
 }
 
+int sys_setrlimit(int resource, struct rlimit *rlim)
+{
+  int ret = 0;
+
+  asm("movq $160, %%rax\n"
+      "movq %1, %%rdi\n"
+      "movq %2, %%rsi\n"
+      "syscall\n"
+      "movl %%eax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (resource), "rm" (rlim));
+
+  return ret;
+}
+

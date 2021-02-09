@@ -111,6 +111,27 @@ static inline int __attribute__((always_inline)) antidebug_signal_check()
   return sigtrap_counter != oldval + 1;
 }
 
+/* Sets the maximum core dump size to 0 via setrlimit. When called in the child
+ * (or in the parent pre-fork as limits are inherited after fork), this makes
+ * it impossible to eg. hit the child with a SIGSEGV and get a core dump.
+ *
+ * Always inline antidebug_rlimit_set_zero_core for the same reasons as
+ * check_traced() above.
+ */
+static inline void __attribute__((always_inline))
+antidebug_rlimit_set_zero_core()
+{
+#ifdef NO_ANTIDEBUG
+  return;
+#endif
+
+  struct rlimit limit;
+  limit.rlim_cur = 0;
+  limit.rlim_max = 0;
+  int ret = sys_setrlimit(RLIMIT_CORE, &limit);
+  DIE_IF_FMT(ret != 0, "rlimit(RLIMIT_CORE, {0, 0}) failed with %d", ret);
+}
+
 void signal_antidebug_init();
 void antidebug_set_nondumpable();
 

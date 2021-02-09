@@ -240,6 +240,12 @@ void *load(void *entry_stacktop)
   if (check_traced())
     DIE(TRACED_MSG);
 
+  /* Disable core dumps via rlimit here before we start doing sensitive stuff
+   * like key deobfuscation and binary decryption. Child process should
+   * inherit these limits after the fork, although it wouldn't hurt to call
+   * this again post-fork just in case this inlined call is patched out. */
+  antidebug_rlimit_set_zero_core();
+
   /* As per the SVr4 ABI */
   /* int argc = (int) *((unsigned long long *) entry_stacktop); */
   char **argv = ((char **) entry_stacktop) + 1;

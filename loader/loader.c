@@ -201,7 +201,7 @@ static void setup_auxv(
   unsigned long long *auxv_start = argv_start;
 
 #define ADVANCE_PAST_NEXT_NULL(ptr) \
-  while (*(++ptr) != NULL) ;        \
+  while (*(++ptr) != 0) ;           \
   ptr++;
 
   ADVANCE_PAST_NEXT_NULL(auxv_start) /* argv */

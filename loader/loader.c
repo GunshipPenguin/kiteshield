@@ -208,7 +208,6 @@ static void setup_auxv(
   ADVANCE_PAST_NEXT_NULL(auxv_start) /* envp */
 
   DEBUG_FMT("taking %p as auxv start", auxv_start);
-  replace_auxv_ent(auxv_start, AT_UID, 0);
   replace_auxv_ent(auxv_start, AT_ENTRY, (unsigned long long) entry);
   replace_auxv_ent(auxv_start, AT_PHDR, (unsigned long long) phdr_addr);
   replace_auxv_ent(auxv_start, AT_BASE, (unsigned long long) interp_base);

@@ -1,7 +1,7 @@
 #include <elf.h>
 
 #include "common/include/defs.h"
-#include "common/include/key_utils.h"
+#include "common/include/obfuscation.h"
 
 #include "loader/include/types.h"
 

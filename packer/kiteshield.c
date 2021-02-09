@@ -14,7 +14,7 @@
 #include "bddisasm.h"
 
 #include "common/include/rc4.h"
-#include "common/include/key_utils.h"
+#include "common/include/obfuscation.h"
 #include "common/include/defs.h"
 #include "packer/include/elfutils.h"
 
@@ -477,11 +477,12 @@ static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
                         sizeof(struct trap_point) * tp_info->ntps +
                         sizeof(struct function) * tp_info->nfuncs;
   void *loader_tp_info = malloc(sizeof(loader_x86_64) + tp_info_size);
+  obf_deobf_tp_info(tp_info);
+  memcpy(loader_tp_info, loader_x86_64, sizeof(loader_x86_64));
   info(
       "injected trap point info into loader (old size: %u new size: %u)",
       sizeof(loader_x86_64), *new_size);
 
-  memcpy(loader_tp_info, loader_x86_64, sizeof(loader_x86_64));
 
   /* subtract sizeof(struct trap_point_info) here to ensure we overwrite the
    * non flexible-array portion of the struct that the linker actually puts in

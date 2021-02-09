@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include "common/include/defs.h"
 
 /* Outer key obfuscation / deobfuscation function.
@@ -36,6 +37,30 @@ void obf_deobf_outer_key(
 
     loader_index ++;
     key_index = (key_index + 1) % sizeof(new_key->bytes);
+  }
+}
+
+/* Trap point info obfuscation / deobfuscation function.
+ *
+ * Obfuscates the passed in trap point info so we're not storing the
+ * per-function keys (and function/trap point metadata) naked on disk.
+ *
+ * Unlike the outer key, we're not going for a checksumming like effect here,
+ * so just use a simple incrementing XOR to obfuscate all the information in
+ * the trap_point_info struct.
+ *
+ * As above, this function is an involution.
+ */
+void obf_deobf_tp_info(
+    struct trap_point_info *tp_info) {
+  size_t size = (sizeof(struct trap_point) * tp_info->ntps) +
+                (sizeof(struct function) * tp_info->nfuncs);
+
+  /* Skip the data actually in the struct trap_point_info and not the flexible
+   * array as we need it to calculate the size to obfuscate/deobfuscate */
+  uint8_t *data = (uint8_t *) tp_info + sizeof(struct trap_point_info);
+  for (size_t i = 0; i < size; i++) {
+    data[i] = data[i] ^ (i % 256);
   }
 }
 

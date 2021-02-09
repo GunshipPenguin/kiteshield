@@ -2,7 +2,7 @@
 
 #include "common/include/defs.h"
 #include "common/include/rc4.h"
-#include "common/include/key_utils.h"
+#include "common/include/obfuscation.h"
 
 #include "loader/include/types.h"
 #include "loader/include/debug.h"

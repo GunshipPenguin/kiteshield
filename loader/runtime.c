@@ -1,4 +1,5 @@
 #include "common/include/defs.h"
+#include "common/include/obfuscation.h"
 #include "common/include/rc4.h"
 
 #include "loader/include/types.h"
@@ -226,6 +227,8 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 void runtime_start()
 {
   DEBUG("starting ptrace runtime");
+  obf_deobf_tp_info(&tp_info);
+
   DEBUG_FMT("number of trap points: %u", tp_info.ntps);
   DEBUG_FMT("number of encrypted functions: %u", tp_info.nfuncs);
 

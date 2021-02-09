@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <errno.h>
 #include <sys/random.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -28,6 +29,14 @@
     }                                                                         \
   } while(0)
 
+#define STRINGIFY_KEY(key) \
+  ({ char buf[(sizeof(key.bytes) * 2) + 1]; \
+  for (int i = 0; i < sizeof(key.bytes); i++) { \
+    sprintf(&buf[i * 2], "%02hhx", key.bytes[i]); \
+  }; \
+  buf; \
+  })
+
 static int log_verbose = 0;
 
 /* Needs to be defined for bddisasm */
@@ -47,6 +56,24 @@ void* nd_memset(void *s, int c, size_t n)
   return memset(s, c, n);
 }
 
+static void err(char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+
+  vfprintf(stderr, fmt, args);
+  printf("\n");
+}
+
+static void info(char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+
+  vprintf(fmt, args);
+  printf("\n");
+}
+
 static void verbose(char *fmt, ...)
 {
   if (!log_verbose)
@@ -56,6 +83,7 @@ static void verbose(char *fmt, ...)
   va_start(args, fmt);
 
   vprintf(fmt, args);
+  printf("\n");
 }
 
 static int read_input_elf(char *path, struct mapped_elf *elf)
@@ -240,6 +268,9 @@ static int process_func(
   fcn->name[sizeof(fcn->name) - 1] = '\0';
 #endif
 
+  info("encrypting function %s with key %s",
+      elf_get_sym_name(elf, func_sym), STRINGIFY_KEY(fcn->key));
+
   uint8_t *code_ptr = func_start;
   while (code_ptr < func_start + func_sym->st_size) {
     /* Iterate over every instruction in the function and determine if it
@@ -247,7 +278,7 @@ static int process_func(
     INSTRUX ix;
     NDSTATUS status = NdDecode(&ix, code_ptr, ND_CODE_64, ND_DATA_64);
     if (!ND_SUCCESS(status)) {
-      fprintf(stderr, "instruction decoding failed\n");
+      err("instruction decoding failed");
       return -1;
     }
     size_t off = (size_t) (code_ptr - func_start);
@@ -263,11 +294,11 @@ static int process_func(
     if (is_jmp_to_instrument || is_ret_to_instrument) {
       void *addr = (void *)
                    (base_addr + func_sym->st_value + off);
-      verbose("\tinstrumenting %s at vaddr %p\n",
-          ix.Mnemonic, addr, off);
-
       struct trap_point *tp =
         (struct trap_point *) &tp_arr[tp_info->ntps++];
+
+      verbose("\tinstrumenting %s instr at address %p", ix.Mnemonic, addr, off);
+
       tp->addr = addr;
       tp->type = is_ret_to_instrument ? TP_RET : TP_JMP;
       tp->value = *code_ptr;
@@ -303,16 +334,15 @@ static int apply_inner_encryption(
     struct mapped_elf *elf,
     struct trap_point_info **tp_info)
 {
-  verbose("applying inner encryption (per-function encryption)\n");
+  info("applying inner encryption");
 
   if (elf->ehdr->e_shoff == 0 || !elf->symtab) {
-    printf("binary is stripped, not applying inner encryption\n");
+    info("binary is stripped, not applying inner encryption");
     return -1;
   }
 
   if (!elf->strtab) {
-    fprintf(stderr,
-        "could not find string table, not applying inner encryption\n");
+    err("could not find string table, not applying inner encryption");
     return -1;
   }
 
@@ -335,7 +365,7 @@ static int apply_inner_encryption(
     INSTRUX ix;
     NDSTATUS status = NdDecode(&ix, func_code_start, ND_CODE_64, ND_DATA_64);
     if (!ND_SUCCESS(status)) {
-      fprintf(stderr, "instruction decoding failed");
+      err("instruction decoding failed");
       return -1;
     }
 
@@ -364,13 +394,13 @@ static int apply_inner_encryption(
      *  functions in glibc that are like this.
      */
     if (!elf_sym_in_text(elf, sym)) {
-      verbose("not encrypting function %s as it's not in .text\n",
+      verbose("not encrypting function %s as it's not in .text",
               elf_get_sym_name(elf, sym));
       continue;
     } else if (sym->st_value == 0 ||
                sym->st_size < 2) {
       verbose(
-          "not encrypting of function %s due to its address or size\n",
+          "not encrypting function %s due to its address or size",
           elf_get_sym_name(elf, sym));
       continue;
     } else if (ix.Instruction == ND_INS_JMPNI ||
@@ -378,7 +408,7 @@ static int apply_inner_encryption(
                ix.Instruction == ND_INS_Jcc ||
                ix.Instruction == ND_INS_CALLNI ||
                ix.Instruction == ND_INS_CALLNR) {
-      verbose("not encrypting function %s due to first instruction being jmp/ret\n",
+      verbose("not encrypting function %s due to first instruction being jmp/ret",
               elf_get_sym_name(elf, sym));
       continue;
     }
@@ -389,18 +419,13 @@ static int apply_inner_encryption(
      */
     const Elf64_Sym *alias = elf_get_first_fcn_alias(elf, sym);
     if (alias) {
-        verbose(
-            "not encrypting function %s as it aliases %s\n",
+        verbose("not encrypting function %s as it aliases %s",
             elf_get_sym_name(elf, sym), elf_get_sym_name(elf, alias));
         continue;
     }
 
-    verbose("instrumenting and encrypting function %s\n",
-        elf_get_sym_name(elf, sym));
-
     if (process_func(elf, sym, *tp_info, fcn_arr, tp_arr) == -1) {
-      fprintf(stderr, "error instrumenting function %s\n",
-              elf_get_sym_name(elf, sym));
+      err("error instrumenting function %s", elf_get_sym_name(elf, sym));
       return -1;
     }
   }
@@ -421,23 +446,17 @@ static int apply_inner_encryption(
   return 0;
 }
 
-/* Encrypts the input binary as a whole with the given key and injects the key
- * into the loader code so the loader can decrypt.
+/* Encrypts the input binary as a whole injects the outer key into the loader
+ * code so the loader can decrypt.
  */
 static int apply_outer_encryption(
     struct mapped_elf *elf,
     void *loader_start,
     size_t loader_size)
 {
-  verbose("applying outer encryption (whole-binary encryption)\n");
-
   struct rc4_key key;
   CK_NEQ_PERROR(getrandom(key.bytes, sizeof(key.bytes), 0), -1);
-  verbose("using key ");
-  for (int i = 0; i < sizeof(key.bytes); i++) {
-    verbose("%02hhx ", key.bytes[i]);
-  }
-  verbose("for outer encryption\n");
+  info("applying outer encryption with key %s", STRINGIFY_KEY(key));
 
   /* Encrypt the actual binary */
   encrypt_memory_range(&key, elf->start, elf->size);
@@ -458,6 +477,9 @@ static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
                         sizeof(struct trap_point) * tp_info->ntps +
                         sizeof(struct function) * tp_info->nfuncs;
   void *loader_tp_info = malloc(sizeof(loader_x86_64) + tp_info_size);
+  info(
+      "injected trap point info into loader (old size: %u new size: %u)",
+      sizeof(loader_x86_64), *new_size);
 
   memcpy(loader_tp_info, loader_x86_64, sizeof(loader_x86_64));
 
@@ -469,9 +491,6 @@ static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
          tp_info, tp_info_size);
 
   *new_size = sizeof(loader_x86_64) + tp_info_size;
-  verbose(
-      "injected trap point info into loader old size: %u bytes new size: %u bytes\n",
-      sizeof(loader_x86_64), *new_size);
   return loader_tp_info;
 }
 
@@ -484,7 +503,7 @@ static int full_strip(struct mapped_elf *elf)
 {
   Elf64_Phdr *curr_phdr = elf->phdr_tbl;
   size_t new_size = 0;
-  verbose("stripping input binary\n");
+  info("stripping input binary");
 
   /* Calculate minimum size needed to contain all program headers */
   for (int i = 0; i < elf->ehdr->e_phnum; i++) {
@@ -499,9 +518,8 @@ static int full_strip(struct mapped_elf *elf)
     elf->ehdr->e_shnum = 0;
     elf->ehdr->e_shstrndx = 0;
   } else {
-    fprintf(stdout,
-            "warning: could not strip out all section info from binary\n");
-    fprintf(stdout, "output binary may be corrupt!\n");
+    info("warning: could not strip out all section info from binary");
+    info("output binary may be corrupt!");
   }
 
   void *new_elf = malloc(new_size);
@@ -515,25 +533,25 @@ static int full_strip(struct mapped_elf *elf)
 
 static void usage()
 {
-  printf(
+  info(
       "Kiteshield, an obfuscating packer for x86-64 binaries on Linux\n"
       "Usage: kiteshield [OPTION] INPUT_FILE OUTPUT_FILE\n\n"
       "  -n       don't apply inner encryption (per-function encryption)\n"
-      "  -v       verbose\n"
+      "  -v       verbose logging"
   );
 }
 
 static void banner()
 {
-  printf("                                                    ________\n"
-         " _     _  _              _      _        _      _  |   ||   |\n"
-         "| |   (_)| |            | |    (_)      | |    | | |___||___|\n"
-         "| | __ _ | |_  ___  ___ | |__   _   ___ | |  __| | |___  ___|\n"
-         "| |/ /| || __|/ _ \\/ __|| '_ \\ | | / _ \\| | / _` | |   ||   | \n"
-         "|   < | || |_|  __/\\__ \\| | | || ||  __/| || (_| |  \\  ||  /\n"
-         "|_|\\_\\|_| \\__|\\___||___/|_| |_||_| \\___||_| \\__,_|   \\_||_/\n"
-         "Kiteshield: A packer/protector for x86-64 ELF binaries on Linux\n"
-         "Copyright (c) Rhys Rustad-Elliott, released under the MIT license\n\n"
+  info("                                                    ________\n"
+       " _     _  _              _      _        _      _  |   ||   |\n"
+       "| |   (_)| |            | |    (_)      | |    | | |___||___|\n"
+       "| | __ _ | |_  ___  ___ | |__   _   ___ | |  __| | |___  ___|\n"
+       "| |/ /| || __|/ _ \\/ __|| '_ \\ | | / _ \\| | / _` | |   ||   | \n"
+       "|   < | || |_|  __/\\__ \\| | | || ||  __/| || (_| |  \\  ||  /\n"
+       "|_|\\_\\|_| \\__|\\___||___/|_| |_||_| \\___||_| \\__,_|   \\_||_/\n"
+       "Kiteshield: A packer/protector for x86-64 ELF binaries on Linux\n"
+       "Copyright (c) Rhys Rustad-Elliott, released under the MIT license\n"
   );
 }
 
@@ -570,10 +588,11 @@ int main(int argc, char *argv[])
   banner();
 
   /* Read ELF to be packed */
+  info("reading input binary %s", input_path);
   struct mapped_elf elf;
   ret = read_input_elf(input_path, &elf);
   if (ret == -1) {
-    fprintf(stderr, "error reading input ELF\n");
+    err("error reading input ELF: %s", strerror(errno));
     return -1;
   }
 
@@ -584,24 +603,26 @@ int main(int argc, char *argv[])
     struct trap_point_info *tp_info = NULL;
     ret = apply_inner_encryption(&elf, &tp_info);
     if (ret == -1) {
-      fprintf(stderr, "could not apply inner encryption\n");
+      err("could not apply inner encryption");
       return -1;
     }
 
     /* Inject trap point info into loader */
     loader_tp_info = inject_tp_info(tp_info, &loader_tp_info_size);
+  } else {
+    info("not applying inner encryption due to -n flag");
   }
 
   /* Fully strip binary */
   if (full_strip(&elf) == -1) {
-    fprintf(stderr, "could not strip binary");
+    err("could not strip binary");
     return -1;
   }
 
   /* Apply outer encryption */
   ret = apply_outer_encryption(&elf, loader_tp_info, loader_tp_info_size);
   if (ret == -1) {
-    fprintf(stderr, "could not apply outer encryption");
+    err("could not apply outer encryption");
     return -1;
   }
 
@@ -611,7 +632,7 @@ int main(int argc, char *argv[])
   ret = produce_output_elf(output_file, &elf, loader_tp_info,
                            loader_tp_info_size);
   if (ret == -1) {
-    fprintf(stderr, "could not produce output ELF\n");
+    err("could not produce output ELF");
     return -1;
   }
 
@@ -619,7 +640,7 @@ int main(int argc, char *argv[])
   CK_NEQ_PERROR(
       chmod(output_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH), -1);
 
-  printf("output ELF has been written to %s\n", output_path);
+  info("output ELF has been written to %s", output_path);
   return 0;
 }
 

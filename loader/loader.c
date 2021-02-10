@@ -137,8 +137,6 @@ static void map_interp(void *path, void **entry, void **interp_base)
       *interp_base = addr;
       base_addr_set = 1;
     }
-    DEBUG_FMT("mapped interpreter segment from fd with offset %p",
-              curr_phdr.p_offset);
   }
 
   DIE_IF(sys_close(interp_fd) < 0, "could not close interpreter binary");
@@ -286,7 +284,7 @@ void *load(void *entry_stacktop)
              interp_base, packed_bin_ehdr->e_phnum);
 
   if (packed_bin_ehdr->e_type == ET_DYN) {
-    DEBUG("packed binary is dynamically linked, setting up auxv array");
+    DEBUG("packed binary is dynamically linked");
   } else if (packed_bin_ehdr->e_type == ET_EXEC) {
     DEBUG("packed binary is statically linked");
     actual_entry = (void *) packed_bin_ehdr->e_entry;

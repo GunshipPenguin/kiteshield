@@ -8,9 +8,8 @@ stack are decrypted at any given time and additionally additionally implements a
 variety of anti-debugging techniques in order to make packed binaries as hard to
 reverse-engineer as possible.
 
-See the [Architecture](#architecture) and [Codebase
-Layout](#codebase-overview) sections below for a bird's-eye view of how
-Kiteshield works.
+See the [Architecture](#architecture) and [Codebase Layout](#codebase-layout)
+sections below for a bird's-eye view of how Kiteshield works.
 
 Kiteshield is intended to be a fun academic exercise in binary obfuscation
 rather than something that can be used in the real world given the source code,

@@ -407,8 +407,9 @@ static int apply_inner_encryption(
                ix.Instruction == ND_INS_JMPNR ||
                ix.Instruction == ND_INS_Jcc ||
                ix.Instruction == ND_INS_CALLNI ||
-               ix.Instruction == ND_INS_CALLNR) {
-      verbose("not encrypting function %s due to first instruction being jmp/ret",
+               ix.Instruction == ND_INS_CALLNR ||
+               ix.Instruction == ND_INS_RETN) {
+      verbose("not encrypting function %s due to first instruction being jmp/ret/call",
               elf_get_sym_name(elf, sym));
       continue;
     }

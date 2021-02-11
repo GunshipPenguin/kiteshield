@@ -1,0 +1,15 @@
+Is 0 even? 1
+Is 1 even? 0
+Is 2 even? 1
+Is 3 even? 0
+Is 128 even? 1
+Is 887 even? 0
+Is 1284 even? 1
+
+Is 0 odd? 0
+Is 1 odd? 1
+Is 2 odd? 0
+Is 3 odd? 1
+Is 128 odd? 0
+Is 887 odd? 1
+Is 1284 odd? 0

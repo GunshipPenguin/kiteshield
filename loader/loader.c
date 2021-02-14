@@ -56,7 +56,7 @@ static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
   return addr;
 }
 
-static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
+static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr, int absolute)
 {
   int prot = 0;
   if (phdr.p_flags & PF_R)
@@ -65,6 +65,8 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
     prot |= PROT_WRITE;
   if (phdr.p_flags & PF_X)
     prot |= PROT_EXEC;
+
+  uint64_t base_addr = absolute ? 0 : INTERP_LOAD_ADDR;
 
   /* mmap requires that the addr and offset fields are multiples of the page
    * size. Since that may not be the case for the p_vaddr and p_offset fields
@@ -79,8 +81,7 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr)
    * (as per the ELF standard), this will result in them both being rounded
    * down by the same amount, and the produced mapping will be correct.
    */
-  void *addr = sys_mmap((void *) (INTERP_LOAD_ADDR +
-                                  PAGE_ALIGN_DOWN(phdr.p_vaddr)),
+  void *addr = sys_mmap((void *) (base_addr + PAGE_ALIGN_DOWN(phdr.p_vaddr)),
                         phdr.p_filesz + PAGE_OFFSET(phdr.p_vaddr),
                         prot, MAP_PRIVATE | MAP_FIXED,
                         fd,
@@ -112,8 +113,9 @@ static void map_interp(void *path, void **entry, void **interp_base)
   Elf64_Ehdr ehdr;
   DIE_IF(sys_read(interp_fd, &ehdr, sizeof(ehdr)) < 0,
          "read failure while reading interpreter binary header");
-  *entry = ((void *) INTERP_LOAD_ADDR + ehdr.e_entry);
 
+  *entry = ehdr.e_type == ET_EXEC ?
+      (void *) ehdr.e_entry : (void *) (INTERP_LOAD_ADDR + ehdr.e_entry);
   int base_addr_set = 0;
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;
@@ -130,7 +132,8 @@ static void map_interp(void *path, void **entry, void **interp_base)
     if (curr_phdr.p_type != PT_LOAD)
       continue;
 
-    void *addr = map_load_section_from_fd(interp_fd, curr_phdr);
+    void *addr = map_load_section_from_fd(interp_fd, curr_phdr,
+          ehdr.e_type == ET_EXEC);
 
     if (!base_addr_set){
       DEBUG_FMT("interpreter base address is %p", addr);
@@ -144,7 +147,7 @@ static void map_interp(void *path, void **entry, void **interp_base)
 
 static void *map_elf_from_mem(
     void *elf_start,
-    void **actual_entry,
+    void **interp_entry,
     void **interp_base)
 {
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *) elf_start;
@@ -170,8 +173,12 @@ static void *map_elf_from_mem(
     curr_phdr++;
   }
 
-  if (interp_hdr)
-    map_interp(elf_start + interp_hdr->p_offset, actual_entry, interp_base);
+  if (interp_hdr) {
+    map_interp(elf_start + interp_hdr->p_offset, interp_entry, interp_base);
+  } else {
+    *interp_base = NULL;
+    *interp_entry = NULL;
+  }
 
   return load_addr;
 }
@@ -272,30 +279,27 @@ void *load(void *entry_stacktop)
 
   /* Entry point for ld.so if this is a statically linked binary, otherwise
    * map_elf_from_mem will not touch this and it will be set below. */
-  void *actual_entry = NULL;
-  void *interp_base = NULL; /* Not touched if statically linked */
-  void *load_addr =
-    map_elf_from_mem(packed_bin_ehdr, &actual_entry, &interp_base);
+  void *interp_entry = NULL;
+  void *interp_base = NULL;
+  void *load_addr = map_elf_from_mem(packed_bin_ehdr, &interp_entry, &interp_base);
+  DEBUG_FMT("binary base address is %p", load_addr);
 
-  DEBUG_FMT("load addr is %p", load_addr);
+  void *program_entry = packed_bin_ehdr->e_type == ET_EXEC ?
+               (void *) packed_bin_ehdr->e_entry : load_addr + packed_bin_ehdr->e_entry;
   setup_auxv(argv,
-             (void *) (load_addr + packed_bin_ehdr->e_entry),
+             program_entry,
              (void *) (load_addr + packed_bin_ehdr->e_phoff),
-             interp_base, packed_bin_ehdr->e_phnum);
-
-  if (packed_bin_ehdr->e_type == ET_DYN) {
-    DEBUG("packed binary is dynamically linked");
-  } else if (packed_bin_ehdr->e_type == ET_EXEC) {
-    DEBUG("packed binary is statically linked");
-    actual_entry = (void *) packed_bin_ehdr->e_entry;
-  } else {
-    DIE_FMT("packed binary is of invalid type %d, exiting",
-        packed_bin_ehdr->e_type);
-  }
+             interp_base,
+             packed_bin_ehdr->e_phnum);
 
   DEBUG("finished mapping binary into memory");
-  DEBUG_FMT("preparing to fork and pass control in child to %p", actual_entry);
 
-  return actual_entry;
+  /* load returns the initial address entry code should jump to. If we have a
+   * dynamic linker, this is its entry address, otherwise, it's the address
+   * specified in the binary itself.
+   */
+  void *initial_entry = interp_entry == NULL ? program_entry : interp_entry;
+  DEBUG_FMT("preparing to fork and pass control in child to %p", initial_entry);
+  return initial_entry;
 }
 

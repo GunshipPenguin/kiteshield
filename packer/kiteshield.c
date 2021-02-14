@@ -275,13 +275,17 @@ static int process_func(
   while (code_ptr < func_start + func_sym->st_size) {
     /* Iterate over every instruction in the function and determine if it
      * requires instrumentation */
+    size_t off = (size_t) (code_ptr - func_start);
+    void *addr = (void *)
+                 (base_addr + func_sym->st_value + off);
+
     INSTRUX ix;
     NDSTATUS status = NdDecode(&ix, code_ptr, ND_CODE_64, ND_DATA_64);
     if (!ND_SUCCESS(status)) {
-      err("instruction decoding failed");
+      err("instruction decoding failed at address %p for function %s",
+            addr, elf_get_sym_name(elf, func_sym));
       return -1;
     }
-    size_t off = (size_t) (code_ptr - func_start);
 
     int is_jmp_to_instrument = is_instrumentable_jmp(
         &ix,
@@ -292,8 +296,6 @@ static int process_func(
       ix.Instruction == ND_INS_RETF || ix.Instruction == ND_INS_RETN;
 
     if (is_jmp_to_instrument || is_ret_to_instrument) {
-      void *addr = (void *)
-                   (base_addr + func_sym->st_value + off);
       struct trap_point *tp =
         (struct trap_point *) &tp_arr[tp_info->ntps++];
 
@@ -361,13 +363,6 @@ static int apply_inner_encryption(
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
 
-    uint8_t *func_code_start = elf_get_sym_location(elf, sym);
-    INSTRUX ix;
-    NDSTATUS status = NdDecode(&ix, func_code_start, ND_CODE_64, ND_DATA_64);
-    if (!ND_SUCCESS(status)) {
-      err("instruction decoding failed");
-      return -1;
-    }
 
     /* Skip instrumenting/encrypting functions in cases where it simply will
      * not work or has the potential to mess things up. Specifically, this
@@ -403,12 +398,26 @@ static int apply_inner_encryption(
           "not encrypting function %s due to its address or size",
           elf_get_sym_name(elf, sym));
       continue;
-    } else if (ix.Instruction == ND_INS_JMPNI ||
-               ix.Instruction == ND_INS_JMPNR ||
-               ix.Instruction == ND_INS_Jcc ||
-               ix.Instruction == ND_INS_CALLNI ||
-               ix.Instruction == ND_INS_CALLNR ||
-               ix.Instruction == ND_INS_RETN) {
+    }
+
+    /* We need to do this decoding down here as if we don't, sym->st_value
+     * could be 0.
+     */
+    uint8_t *func_code_start = elf_get_sym_location(elf, sym);
+    INSTRUX ix;
+    NDSTATUS status = NdDecode(&ix, func_code_start, ND_CODE_64, ND_DATA_64);
+    if (!ND_SUCCESS(status)) {
+      err("instruction decoding failed at address %p for function %s",
+          sym->st_value, elf_get_sym_name(elf, sym));
+      return -1;
+    }
+
+    if (ix.Instruction == ND_INS_JMPNI ||
+        ix.Instruction == ND_INS_JMPNR ||
+        ix.Instruction == ND_INS_Jcc ||
+        ix.Instruction == ND_INS_CALLNI ||
+        ix.Instruction == ND_INS_CALLNR ||
+        ix.Instruction == ND_INS_RETN) {
       verbose("not encrypting function %s due to first instruction being jmp/ret/call",
               elf_get_sym_name(elf, sym));
       continue;

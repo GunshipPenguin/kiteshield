@@ -24,7 +24,7 @@ struct rc4_key obfuscated_key __attribute__((section(".key")));
 static void *map_load_section_from_mem(void *elf_start, Elf64_Phdr phdr)
 {
   uint64_t base_addr = ((Elf64_Ehdr *) elf_start)->e_type == ET_DYN ?
-                       UNPACKED_BIN_LOAD_ADDR : 0;
+                       DYN_PROG_BASE_ADDR : 0;
 
   /* Same rounding logic as in map_load_section_from_fd, see comment below.
    * Note that we don't need a separate mmap here for bss if memsz > filesz
@@ -66,7 +66,7 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr, int absolute)
   if (phdr.p_flags & PF_X)
     prot |= PROT_EXEC;
 
-  uint64_t base_addr = absolute ? 0 : INTERP_LOAD_ADDR;
+  uint64_t base_addr = absolute ? 0 : DYN_INTERP_BASE_ADDR;
 
   /* mmap requires that the addr and offset fields are multiples of the page
    * size. Since that may not be the case for the p_vaddr and p_offset fields
@@ -115,7 +115,7 @@ static void map_interp(void *path, void **entry, void **interp_base)
          "read failure while reading interpreter binary header");
 
   *entry = ehdr.e_type == ET_EXEC ?
-      (void *) ehdr.e_entry : (void *) (INTERP_LOAD_ADDR + ehdr.e_entry);
+      (void *) ehdr.e_entry : (void *) (DYN_INTERP_BASE_ADDR + ehdr.e_entry);
   int base_addr_set = 0;
   for (int i = 0; i < ehdr.e_phnum; i++) {
     Elf64_Phdr curr_phdr;

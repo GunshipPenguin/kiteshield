@@ -204,8 +204,8 @@ static uint64_t get_base_addr(Elf64_Ehdr *ehdr)
 {
   /* Return the base address that the binary is to be mapped in at runtime. If
    * statically linked, use absolute addresses (ie. base address = 0).
-   * Otherwise, everything is relative to UNPACKED_BIN_LOAD_ADDR. */
-  return ehdr->e_type == ET_EXEC ? 0ULL : UNPACKED_BIN_LOAD_ADDR;
+   * Otherwise, everything is relative to DYN_PROG_BASE_ADDR. */
+  return ehdr->e_type == ET_EXEC ? 0ULL : DYN_PROG_BASE_ADDR;
 }
 
 /* Determines if the given jmp instruction requires replacement by an int3 and

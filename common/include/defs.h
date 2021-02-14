@@ -17,11 +17,25 @@
  * exec (ie. the p_vaddr field in the binary) */
 #define PACKED_BIN_ADDR 0xA00000ULL
 
-/* Base address the loader will copy the packed binary to before launching */
-#define UNPACKED_BIN_LOAD_ADDR 0x800000000ULL
+/* Base address the loader will load a position-independent packed binary to
+ * before launching.
+ *
+ * Note that this is only relevant for packed binaries of type ET_DYN (ie.
+ * position-independent binaries). ET_EXEC (position-dependent) binaries will
+ * ignore this and just use the absolute addresses specified in their program
+ * headers.
+ */
+#define DYN_PROG_BASE_ADDR 0x800000000ULL
 
-/* Base address at which the loader code will load ld.so */
-#define INTERP_LOAD_ADDR 0xB00000000ULL
+/* Base address at which the loader code will load ld.so (or whatever is
+ * specified in the INTERP header).
+ *
+ * As with DYN_PROG_BASE_ADDR, this is only relevant for program interpreters
+ * of type ET_DYN. If you happen to be packing something using a weird linker
+ * setup where your ld.so is of type ET_EXEC, this will be ignored and the
+ * absolute addresses in the program headers will be used instead.
+ */
+#define DYN_INTERP_BASE_ADDR 0xB00000000ULL
 
 /* This struct is stored at a predefined offset in the loader code, allowing
  * the packer to copy the RC4 decryption key over the loader. */

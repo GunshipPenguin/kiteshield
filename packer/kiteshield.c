@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <sys/random.h>
 #include <stdbool.h>
 #include <unistd.h>
 
@@ -188,6 +187,15 @@ static int produce_output_elf(
   return 0;
 }
 
+static int get_random_bytes(void *buf, size_t len)
+{
+  FILE *f;
+  CK_NEQ_PERROR(f = fopen("/dev/urandom", "r"), NULL);
+  CK_NEQ_PERROR(fread(buf, len, 1, f), 0);
+
+  return 0;
+}
+
 static void encrypt_memory_range(struct rc4_key *key, void *start, size_t len)
 {
   struct rc4_state rc4;
@@ -262,7 +270,7 @@ static int process_func(
 
   fcn->start_addr = base_addr + func_sym->st_value;
   fcn->len = func_sym->st_size;
-  CK_NEQ_PERROR(getrandom(fcn->key.bytes, sizeof(fcn->key.bytes), 0), -1);
+  CK_NEQ_PERROR(get_random_bytes(fcn->key.bytes, sizeof(fcn->key.bytes)), -1);
 #ifdef DEBUG_OUTPUT
   strncpy(fcn->name, elf_get_sym_name(elf, func_sym), sizeof(fcn->name));
   fcn->name[sizeof(fcn->name) - 1] = '\0';
@@ -464,7 +472,7 @@ static int apply_outer_encryption(
     size_t loader_size)
 {
   struct rc4_key key;
-  CK_NEQ_PERROR(getrandom(key.bytes, sizeof(key.bytes), 0), -1);
+  CK_NEQ_PERROR(get_random_bytes(key.bytes, sizeof(key.bytes)), -1);
   info("applying outer encryption with key %s", STRINGIFY_KEY(key));
 
   /* Encrypt the actual binary */

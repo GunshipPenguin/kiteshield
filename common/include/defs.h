@@ -46,7 +46,7 @@ struct rc4_key {
 
 /* Represents a function that contains a trap point */
 struct function {
-  void *start_addr;
+  uint64_t start_addr;
   uint32_t len;
 
   /* Key that this function's code is encrypted with */
@@ -72,7 +72,7 @@ enum tp_type {
  */
 struct trap_point {
   /* Address in program code of this trap point */
-  void *addr;
+  uint64_t addr;
 
   /* Trap point type, either a function entry, jmp that potentially leaves its
    * containing function, or ret */

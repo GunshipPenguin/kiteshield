@@ -260,7 +260,7 @@ static int process_func(
   uint64_t base_addr = get_base_addr(elf->ehdr);
   struct function *fcn = &func_arr[tp_info->nfuncs];
 
-  fcn->start_addr = (void *) (base_addr + func_sym->st_value);
+  fcn->start_addr = base_addr + func_sym->st_value;
   fcn->len = func_sym->st_size;
   CK_NEQ_PERROR(getrandom(fcn->key.bytes, sizeof(fcn->key.bytes), 0), -1);
 #ifdef DEBUG_OUTPUT
@@ -276,8 +276,7 @@ static int process_func(
     /* Iterate over every instruction in the function and determine if it
      * requires instrumentation */
     size_t off = (size_t) (code_ptr - func_start);
-    void *addr = (void *)
-                 (base_addr + func_sym->st_value + off);
+    uint64_t addr = base_addr + func_sym->st_value + off;
 
     INSTRUX ix;
     NDSTATUS status = NdDecode(&ix, code_ptr, ND_CODE_64, ND_DATA_64);
@@ -289,9 +288,9 @@ static int process_func(
 
     int is_jmp_to_instrument = is_instrumentable_jmp(
         &ix,
-        base_addr + func_sym->st_value,
+        fcn->start_addr,
         func_sym->st_size,
-        base_addr + func_sym->st_value + off);
+        addr);
     int is_ret_to_instrument =
       ix.Instruction == ND_INS_RETF || ix.Instruction == ND_INS_RETN;
 
@@ -314,7 +313,7 @@ static int process_func(
   /* Instrument entry point */
   struct trap_point *tp =
     (struct trap_point *) &tp_arr[tp_info->ntps++];
-  tp->addr = (void *) base_addr + func_sym->st_value;
+  tp->addr = base_addr + func_sym->st_value;
   tp->type = TP_FCN_ENTRY;
   tp->value = *func_start;
   tp->fcn_i = tp_info->nfuncs;

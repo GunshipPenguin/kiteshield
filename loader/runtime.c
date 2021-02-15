@@ -17,7 +17,7 @@ struct trap_point_info tp_info __attribute__((section(".tp_info")));
 /* Defined in loader.c */
 extern struct rc4_key obfuscated_key;
 
-struct trap_point *get_tp(void *addr) {
+struct trap_point *get_tp(uint64_t addr) {
   struct trap_point *arr = (struct trap_point *) tp_info.data;
   for (int i = 0; i < tp_info.ntps; i++) {
     if (arr[i].addr == addr) {
@@ -28,7 +28,7 @@ struct trap_point *get_tp(void *addr) {
   return NULL;
 }
 
-static struct function *get_fcn_at_addr(void *addr)
+static struct function *get_fcn_at_addr(uint64_t addr)
 {
   struct function *arr = FCN_ARR_START;
 
@@ -41,7 +41,7 @@ static struct function *get_fcn_at_addr(void *addr)
   return NULL;
 }
 
-static void set_byte_at_addr(pid_t pid, void *addr, uint8_t value)
+static void set_byte_at_addr(pid_t pid, uint64_t addr, uint8_t value)
 {
   long word;
   long res = sys_ptrace(PTRACE_PEEKTEXT, pid, (void *) addr, &word);
@@ -50,7 +50,7 @@ static void set_byte_at_addr(pid_t pid, void *addr, uint8_t value)
   word &= (~0) << 8;
   word |= value;
 
-  res = sys_ptrace(PTRACE_POKETEXT, pid, addr, (void *) word);
+  res = sys_ptrace(PTRACE_POKETEXT, pid, (void *) addr, (void *) word);
   DIE_IF_FMT(res < 0, "PTRACE_POKETEXT failed with error %d", res);
 }
 
@@ -86,7 +86,7 @@ static void rc4_xor_fcn(
   struct rc4_state rc4;
   rc4_init(&rc4, fcn->key.bytes, sizeof(fcn->key.bytes));
 
-  uint8_t *curr_addr = fcn->start_addr;
+  uint8_t *curr_addr = (uint8_t *) fcn->start_addr;
   size_t remaining = fcn->len;
   while (remaining > 0) {
     long word;
@@ -153,7 +153,7 @@ static void handle_fcn_exit(
   DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
 
   struct function *prev_fcn = FCN(tp);
-  struct function *new_fcn = get_fcn_at_addr((void *) regs.ip);
+  struct function *new_fcn = get_fcn_at_addr(regs.ip);
   if (new_fcn != NULL && new_fcn != prev_fcn) {
     DEBUG_FMT("leaving function %s for %s via %s at %p, encrypting with key %s",
               prev_fcn->name, new_fcn->name, tp->type == TP_JMP ? "jmp" : "ret",
@@ -208,7 +208,7 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
   res = sys_ptrace(PTRACE_SETREGS, pid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_SETREGS failed with error %d", res);
 
-  struct trap_point *tp = get_tp((void *) regs.ip);
+  struct trap_point *tp = get_tp(regs.ip);
   if (tp->type == TP_FCN_ENTRY) {
     handle_fcn_entry(pid, tp, key);
   } else {
@@ -294,7 +294,7 @@ void runtime_start()
   }
 }
 
-void do_fork(void *entry)
+void do_fork()
 {
   if (antidebug_proc_check_traced())
     DIE(TRACED_MSG);

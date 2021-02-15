@@ -1,4 +1,4 @@
-CFLAGS = -Wall -fno-pie -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
+CFLAGS = -Wall -std=gnu99 -fno-pie -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
 LDFLAGS = -no-pie
 
 SRCS = $(wildcard *.[c,S] ../common/*.c)

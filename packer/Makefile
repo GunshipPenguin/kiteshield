@@ -1,4 +1,4 @@
-CFLAGS = -Wall -I .. -I bddisasm/inc
+CFLAGS = -Wall -std=gnu99 -I .. -I bddisasm/inc
 LDFLAGS = -Lbddisasm/bin/x64/Release -l:libbddisasm.a
 
 SRCS = $(wildcard *.c ../common/*.c)

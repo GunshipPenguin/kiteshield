@@ -270,6 +270,7 @@ static int process_func(
 
   fcn->start_addr = base_addr + func_sym->st_value;
   fcn->len = func_sym->st_size;
+  fcn->encrypted = 1;
   CK_NEQ_PERROR(get_random_bytes(fcn->key.bytes, sizeof(fcn->key.bytes)), -1);
 #ifdef DEBUG_OUTPUT
   strncpy(fcn->name, elf_get_sym_name(elf, func_sym), sizeof(fcn->name));

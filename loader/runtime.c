@@ -120,10 +120,20 @@ static void handle_fcn_entry(
   }
   struct function *fcn = FCN(tp);
 
+  if (!fcn->encrypted) {
+    /* We should never get here, this means a trap point was hit (ie. first
+     * byte of the function is an int3), but the function is marked as
+     * decrypted (which it shouldn't be if the first byte contains an int3).
+     */
+    DIE_FMT("(runtime bug) caught trap point for entry to %s, which is marked decrypted",
+            fcn->name);
+  }
+
   DEBUG_FMT("entering function %s, decrypting with key %s", fcn->name,
       STRINGIFY_KEY(&fcn->key));
 
   /* Decrypt callee */
+  fcn->encrypted = 0;
   rc4_xor_fcn(pid, fcn);
   set_byte_at_addr(pid, tp->addr, tp->value);
   single_step(pid);
@@ -162,14 +172,26 @@ static void handle_fcn_exit(
     /* Encrypt prev_fcn (function we're leaving) */
     rc4_xor_fcn(pid, prev_fcn);
     set_byte_at_addr(pid, prev_fcn->start_addr, INT3);
+    prev_fcn->encrypted = 1;
 
-    /* If we're entering a function via an out-of-function jmp, we assume it's
-     * not in the current call stack, and thus we must decrypt it. */
-    if (tp->type == TP_JMP) {
+    /* If new_fcn is encrypted, decrypt it. This can happen when the binary
+     * contains weird control flow (eg. inter-function jmp instructions).
+     */
+    if (new_fcn->encrypted) {
+      DEBUG_FMT("function being entered via %s is encrypted, decrypting with key %s",
+                tp->type == TP_JMP ? "jmp" : "ret",
+                STRINGIFY_KEY(&new_fcn->key));
+
+      new_fcn->encrypted = 0;
       rc4_xor_fcn(pid, new_fcn);
+
       struct trap_point *new_fcn_tp = get_tp(new_fcn->start_addr);
-      if (new_fcn_tp != NULL)
+      if (new_fcn_tp != NULL) {
         set_byte_at_addr(pid, new_fcn->start_addr, new_fcn_tp->value);
+      } else {
+        DIE_FMT("could not find entry trap point for function %s",
+            new_fcn->name);
+      }
     }
   } else if (!new_fcn) {
     DEBUG_FMT(
@@ -179,6 +201,7 @@ static void handle_fcn_exit(
     /* Encrypt prev_fcn (function we're leaving) */
     rc4_xor_fcn(pid, prev_fcn);
     set_byte_at_addr(pid, prev_fcn->start_addr, INT3);
+    prev_fcn->encrypted = 1;
   }
 #ifdef DEBUG_OUTPUT
   else {

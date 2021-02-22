@@ -17,7 +17,7 @@
 
 #define PAGE_ALIGN_DOWN(ptr) ((ptr) & PAGE_MASK)
 #define PAGE_ALIGN_UP(ptr) ((((ptr) - 1) & PAGE_MASK) + PAGE_SIZE)
-#define PAGE_OFFSET(ptr) (ptr & ~(PAGE_MASK))
+#define PAGE_OFFSET(ptr) ((ptr) & ~(PAGE_MASK))
 
 struct rc4_key obfuscated_key __attribute__((section(".key")));
 
@@ -83,7 +83,8 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr, int absolute)
    */
   void *addr = sys_mmap((void *) (base_addr + PAGE_ALIGN_DOWN(phdr.p_vaddr)),
                         phdr.p_filesz + PAGE_OFFSET(phdr.p_vaddr),
-                        prot, MAP_PRIVATE | MAP_FIXED,
+                        prot,
+                        MAP_PRIVATE | MAP_FIXED,
                         fd,
                         PAGE_ALIGN_DOWN(phdr.p_offset));
   DIE_IF((long) addr < 0,
@@ -92,12 +93,52 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr, int absolute)
   /* If p_memsz > p_filesz, the remaining space must be filled with zeros
    * (Usually the .bss section), map extra anon pages if this is the case. */
   if (phdr.p_memsz > phdr.p_filesz) {
-    void *extra_space = sys_mmap(addr + PAGE_ALIGN_UP(phdr.p_filesz),
-                                 phdr.p_memsz - phdr.p_filesz, prot,
+    /* Unless the segment mapped above falls perfectly on a page boundary,
+     * we've mapped some .bss already by virtue of the fact that mmap will pad
+     * our mapping with zeros to a page boundary. Subtract that already mapped
+     * bss from the extra space we have to allocate */
+
+    /* Page size minus amount of space occupied in the last page of the above
+     * mapping by the file */
+    size_t bss_already_mapped =
+      PAGE_SIZE - PAGE_OFFSET(phdr.p_vaddr + phdr.p_filesz);
+
+    void *extra_pages_start =
+      (void *) PAGE_ALIGN_UP(base_addr + phdr.p_vaddr + phdr.p_filesz);
+    size_t extra_space_needed =
+      (size_t) (phdr.p_memsz - phdr.p_filesz) - bss_already_mapped;
+
+    void *extra_space = sys_mmap(extra_pages_start,
+                                 extra_space_needed,
+                                 prot,
                                  MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS,
                                  -1, 0);
+
     DIE_IF((long) extra_space < 0,
            "mmap failure while mapping extra space for static vars");
+
+    DEBUG_FMT("Mapped extra space for static data (.bss) at %p len %u",
+              extra_space, extra_space_needed);
+
+    /* While the extra pages mapped will be zeroed by default, this is not the
+     * case for the part of the original page corresponding to
+     * bss_already_mapped (it will contain junk from the file) so we zero it
+     * here.  */
+    uint8_t *bss_ptr = (uint8_t *) (base_addr + phdr.p_vaddr + phdr.p_filesz);
+    if (!(prot & PROT_WRITE)) {
+      DIE_IF(
+          sys_mprotect(bss_ptr, bss_already_mapped, PROT_WRITE) < 0,
+          "mprotect error");
+    }
+
+    for (size_t i = 0; i < bss_already_mapped; i++)
+      *(bss_ptr + i) = 0;
+
+    if (!(prot & PROT_WRITE)) {
+      DIE_IF(
+          sys_mprotect(bss_ptr, bss_already_mapped, prot) < 0,
+          "mprotect error");
+    }
   }
 
   DEBUG_FMT("mapped LOAD section from fd at %p", addr);

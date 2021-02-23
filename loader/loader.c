@@ -102,25 +102,27 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr, int absolute)
      * mapping by the file */
     size_t bss_already_mapped =
       PAGE_SIZE - PAGE_OFFSET(phdr.p_vaddr + phdr.p_filesz);
-
     void *extra_pages_start =
       (void *) PAGE_ALIGN_UP(base_addr + phdr.p_vaddr + phdr.p_filesz);
-    size_t extra_space_needed =
-      (size_t) (phdr.p_memsz - phdr.p_filesz) - bss_already_mapped;
 
-    void *extra_space = sys_mmap(extra_pages_start,
-                                 extra_space_needed,
-                                 prot,
-                                 MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS,
-                                 -1, 0);
+    if (bss_already_mapped < (phdr.p_memsz - phdr.p_filesz)) {
+      size_t extra_space_needed =
+        (size_t) (phdr.p_memsz - phdr.p_filesz) - bss_already_mapped;
 
-    DIE_IF((long) extra_space < 0,
-           "mmap failure while mapping extra space for static vars");
+      void *extra_space = sys_mmap(extra_pages_start,
+                                   extra_space_needed,
+                                   prot,
+                                   MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS,
+                                   -1, 0);
 
-    DEBUG_FMT("Mapped extra space for static data (.bss) at %p len %u",
-              extra_space, extra_space_needed);
+      DIE_IF((long) extra_space < 0,
+             "mmap failure while mapping extra space for static vars");
 
-    /* While the extra pages mapped will be zeroed by default, this is not the
+      DEBUG_FMT("Mapped extra space for static data (.bss) at %p len %u",
+                extra_space, extra_space_needed);
+    }
+
+    /* While any extra pages mapped will be zeroed by default, this is not the
      * case for the part of the original page corresponding to
      * bss_already_mapped (it will contain junk from the file) so we zero it
      * here.  */

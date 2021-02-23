@@ -90,6 +90,12 @@ cd ..
 make clean
 make
 
+RUN_CONTAINER_TESTS_CFLAGS alpine gcc
+RUN_CONTAINER_TESTS_CFLAGS alpine clang
+
+RUN_CONTAINER_TESTS_CFLAGS fedora gcc
+RUN_CONTAINER_TESTS_CFLAGS fedora clang
+
 RUN_CONTAINER_TESTS_CFLAGS ubuntu-trusty gcc
 RUN_CONTAINER_TESTS_CFLAGS ubuntu-trusty clang-3.6
 

@@ -47,4 +47,4 @@ RUN_TEST file_read 0
 RUN_TEST longjmp 0
 RUN_TEST mutual_recursion 0
 RUN_TEST prime_sieve 0
-
+RUN_TEST static_data 0

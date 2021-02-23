@@ -6,7 +6,7 @@ RUN_TEST () {
   TEST_NAME=$1
   EXPECTED_STATUS=$2
 
-  echo -ne "\tRunning test $TEST_NAME "
+  printf "\t%-50s" "Running test $TEST_NAME"
 
   TEST_BINARY="${TEST_NAME}.ks"
   EXPECTED_OUTPUT=$(cat ./tests/expected_outputs/$TEST_NAME)

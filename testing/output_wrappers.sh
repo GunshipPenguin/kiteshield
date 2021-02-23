@@ -18,8 +18,8 @@ LIGHTPURPLE='\033[1;35m'
 LIGHTCYAN='\033[1;36m'
 WHITE='\033[1;37m'
 
-CHECK_MARK="\xE2\x9C\x94"
-X_MARK="\xE2\x9C\x97"
+CHECK_MARK=$(echo -e "\xE2\x9C\x94")
+X_MARK=$(echo -e "\xE2\x9C\x97")
 
 function echo_red () {
   echo -e "${RED}${BOLD}$1${NOBOLD}${NOCOLOR}"

@@ -13,7 +13,7 @@ RUN_CONTAINER_TESTS () {
   rm -r testing/out
   mkdir -p testing/out
 
-  echo -ne "\tBuilding test container... "
+  printf "\t%-50s" "Building test container..."
   docker build \
     --quiet \
     -t ${IMG}-ks-test \
@@ -21,13 +21,13 @@ RUN_CONTAINER_TESTS () {
 
   if [ $? -ne 0 ]
   then
-    echo -e "\tError building docker image"
+    echo_red -e "\tError building docker image"
     exit 1
   else
     echo_green "$CHECK_MARK done"
   fi
 
-  echo -ne "\tBuilding tests... "
+  printf "\t%-50s" "Building tests..."
   docker run \
     --rm \
     --cap-add=SYS_PTRACE \
@@ -44,7 +44,7 @@ RUN_CONTAINER_TESTS () {
     echo_green "$CHECK_MARK done"
   fi
 
-  echo -ne "\tPacking test binaries... "
+  printf "\t%-50s" "Packing test binaries..."
   for UNPACKED_BIN in testing/out/*
   do
     PACKER_OUTPUT=$(mktemp)
@@ -61,7 +61,6 @@ RUN_CONTAINER_TESTS () {
 
   echo_green "$CHECK_MARK done"
 
-  echo -e "\tRunning tests:"
   docker run \
     --rm \
     --cap-add=SYS_PTRACE \

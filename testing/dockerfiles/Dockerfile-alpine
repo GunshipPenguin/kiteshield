@@ -1,4 +1,4 @@
 FROM alpine:latest
 
-RUN ["apk", "add", "bash", "build-base", "clang"]
+RUN apk add bash build-base clang
 

@@ -89,6 +89,12 @@ cd ..
 make clean
 make
 
+RUN_CONTAINER_TESTS_CFLAGS centos-8 gcc
+RUN_CONTAINER_TESTS_CFLAGS centos-8 clang
+
+RUN_CONTAINER_TESTS_CFLAGS centos-7 gcc
+RUN_CONTAINER_TESTS_CFLAGS centos-7 clang
+
 RUN_CONTAINER_TESTS_CFLAGS alpine gcc
 RUN_CONTAINER_TESTS_CFLAGS alpine clang
 

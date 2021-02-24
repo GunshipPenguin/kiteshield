@@ -94,9 +94,9 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr, int absolute)
    * (Usually the .bss section), map extra anon pages if this is the case. */
   if (phdr.p_memsz > phdr.p_filesz) {
     /* Unless the segment mapped above falls perfectly on a page boundary,
-     * we've mapped some .bss already by virtue of the fact that mmap will pad
-     * our mapping with zeros to a page boundary. Subtract that already mapped
-     * bss from the extra space we have to allocate */
+     * we've mapped some .bss already by virtue of the fact that mmap will
+     * round the size of our mapping up to a page boundary. Subtract that
+     * already mapped bss from the extra space we have to allocate */
 
     /* Page size minus amount of space occupied in the last page of the above
      * mapping by the file */

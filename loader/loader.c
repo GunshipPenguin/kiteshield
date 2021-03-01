@@ -8,7 +8,6 @@
 #include "loader/include/debug.h"
 #include "loader/include/elf_auxv.h"
 #include "loader/include/syscalls.h"
-#include "loader/include/outer_key_deobfuscation.h"
 #include "loader/include/anti_debug.h"
 
 #define PAGE_SHIFT 12
@@ -279,6 +278,29 @@ static void decrypt_packed_bin(
   }
 
   DEBUG_FMT("decrypted %u bytes", packed_bin_size);
+}
+
+/* Convenience wrapper around obf_deobf_outer_key to automatically pass in
+ * correct loader code offsets. */
+void loader_outer_key_deobfuscate(
+    struct rc4_key *old_key,
+    struct rc4_key *new_key)
+{
+  /* "our" EHDR (ie. the one in the on-disk binary that was run) */
+  Elf64_Ehdr *us_ehdr = (Elf64_Ehdr *) LOADER_ADDR;
+
+  /* The PHDR in our binary corresponding to the loader (ie. this code) */
+  Elf64_Phdr *loader_phdr = (Elf64_Phdr *)
+                            (LOADER_ADDR + us_ehdr->e_phoff);
+
+  /* The first ELF segment (loader code) includes the ehdr and two phdrs,
+   * adjust loader code start and size accordingly */
+  size_t hdr_adjust = sizeof(Elf64_Ehdr) + (2 * sizeof(Elf64_Phdr));
+
+  void *loader_start = (void *) loader_phdr->p_vaddr + hdr_adjust;
+  size_t loader_size = loader_phdr->p_memsz - hdr_adjust;
+
+  obf_deobf_outer_key(old_key, new_key, loader_start, loader_size);
 }
 
 /* Load the packed binary, returns the address to hand control to when done */

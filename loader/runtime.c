@@ -6,7 +6,6 @@
 #include "loader/include/debug.h"
 #include "loader/include/syscalls.h"
 #include "loader/include/signal.h"
-#include "loader/include/outer_key_deobfuscation.h"
 #include "loader/include/anti_debug.h"
 
 #define FCN_ARR_START ((struct function *) (((struct trap_point *) tp_info.data) + tp_info.ntps))
@@ -111,8 +110,7 @@ static void rc4_xor_fcn(
 
 static void handle_fcn_entry(
     pid_t pid,
-    struct trap_point *tp,
-    struct rc4_key *key)
+    struct trap_point *tp)
 {
   if (antidebug_proc_check_traced()) {
     sys_kill(pid, SIGKILL);
@@ -141,8 +139,7 @@ static void handle_fcn_entry(
 
 static void handle_fcn_exit(
     pid_t pid,
-    struct trap_point *tp,
-    struct rc4_key *key)
+    struct trap_point *tp)
 {
   if (antidebug_proc_check_traced()) {
     sys_kill(pid, SIGKILL);
@@ -212,7 +209,7 @@ static void handle_fcn_exit(
 #endif
 }
 
-static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
+static void handle_trap(pid_t pid, int wstatus)
 {
   if (antidebug_proc_check_traced()) {
     sys_kill(pid, SIGKILL);
@@ -233,9 +230,9 @@ static void handle_trap(pid_t pid, int wstatus, struct rc4_key *key)
 
   struct trap_point *tp = get_tp(regs.ip);
   if (tp->type == TP_FCN_ENTRY) {
-    handle_fcn_entry(pid, tp, key);
+    handle_fcn_entry(pid, tp);
   } else {
-    handle_fcn_exit(pid, tp, key);
+    handle_fcn_exit(pid, tp);
   }
 
   if (antidebug_signal_check()) {
@@ -254,9 +251,6 @@ void runtime_start()
 
   DEBUG_FMT("number of trap points: %u", tp_info.ntps);
   DEBUG_FMT("number of encrypted functions: %u", tp_info.nfuncs);
-
-  struct rc4_key actual_key;
-  loader_outer_key_deobfuscate(&obfuscated_key, &actual_key);
 
   antidebug_signal_init();
 
@@ -313,7 +307,7 @@ void runtime_start()
       DIE(TRACED_MSG);
     }
 
-    handle_trap(pid, wstatus, &actual_key);
+    handle_trap(pid, wstatus);
   }
 }
 

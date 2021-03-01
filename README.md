@@ -22,9 +22,9 @@ prevalent in Old School Runescape).
 ## Building Kiteshield
 
 Kiteshield requires the [Bitdefender
-disassembler](https://github.com/bitdefender/bddisasm) for instruction decoding
-instructions in the packer. It is included as a submodule at `packer/bddisasm` .
-To build it from a fresh clone, run the following (note you will need to have
+disassembler](https://github.com/bitdefender/bddisasm) library to decode
+instructions in the packer. It is included as a submodule at `packer/bddisasm`
+. To build it from a fresh clone, run the following (note you will need to have
 CMake installed):
 
 ```
@@ -98,7 +98,7 @@ kiteshield
 │   │   ├── defs.h
 │   │   ├── obfuscation.h
 │   │   └── rc4.h
-│   ├── obfuscation.c                    # Layer 1 obfuscation code used in packer/loader
+│   ├── obfuscation.c                    # Obfuscation utilities
 │   └── rc4.c                            # RC4 stream cipher implementation
 ├── LICENSE
 ├── loader                               # Loader code
@@ -111,7 +111,6 @@ kiteshield
 │   │   ├── debug.h
 │   │   ├── elf_auxv.h
 │   │   ├── obfuscated_strings.h         # Generated file produced by string_obfuscation.py
-│   │   ├── outer_key_deobfuscation.h
 │   │   ├── signal.h
 │   │   ├── string.h
 │   │   ├── syscalls.h
@@ -121,7 +120,6 @@ kiteshield
 │   ├── Makefile
 │   ├── outer_key_deobfuscation.c        # Key deobfuscation convenience wrapper
 │   ├── runtime.c                        # Runtime engine code
-│   ├── sigreturn.S
 │   ├── string.c                         # String utilities (eg. strncat)
 │   ├── string_obfuscation.py            # String obfuscation helper script
 │   └── syscalls.c                       # System call implementations in inline assembly
@@ -133,7 +131,8 @@ kiteshield
 │   │   └── elfutils.h
 │   ├── kiteshield.c                     # Main packer code
 │   └── Makefile
-└── README.md
+├── README.md
+└── testing                              # Integration tests (see testing/README.md)
 ```
 
 ## <a name="architecture"></a> Architecture
@@ -196,7 +195,7 @@ clarity) to provide a concrete example of Kiteshield in action:
 ```
 $ ./packed.ks
 # Stripping layer 1 encryption
-[kiteshield] RC4 decrypting binary with key 06230375f6c4c3bdf718a1fcfb97016c
+[kiteshield] RC4 decrypting binary with key f31de2fd90ed703bac45991e6042da81
 [kiteshield] decrypted 12336 bytes
 
 # Mapping segments from packed binary program header table
@@ -211,16 +210,16 @@ $ ./packed.ks
 [kiteshield] interpreter base address is b00000000
 [kiteshield] mapped LOAD section from fd at b00001000
 [kiteshield] mapped LOAD section from fd at b0001f000
+[kiteshield] Mapped extra space for static data (.bss) at b00029000 len 400
 [kiteshield] mapped LOAD section from fd at b00027000
-[kiteshield] load addr is 800000000
+[kiteshield] binary base address is 800000000
 
 # Modifying ELF auxiliary vector as needed for program execution
-[kiteshield] taking 7fffdba881d0 as auxv start
+[kiteshield] taking 7fff734f8730 as auxv start
 [kiteshield] replaced auxv entry 9 with value 34359742544 (0x800001050)
 [kiteshield] replaced auxv entry 3 with value 34359738432 (0x800000040)
 [kiteshield] replaced auxv entry 7 with value 47244640256 (0xb00000000)
 [kiteshield] replaced auxv entry 5 with value 11 (0xb)
-[kiteshield] packed binary is dynamically linked
 [kiteshield] finished mapping binary into memory
 
 # Mapping done, forking, starting runtime in parent, and handing control to ld.so in child
@@ -228,8 +227,6 @@ $ ./packed.ks
 [kiteshield] starting ptrace runtime
 [kiteshield] number of trap points: 5
 [kiteshield] number of encrypted functions: 3
-[kiteshield] child: PTRACE_TRACEME was successful
-[kiteshield] child: handing control to packed binary
 
 # List of points in memory that have been instrumented with an int3 instruction
 [kiteshield] list of trap points:
@@ -238,22 +235,28 @@ $ ./packed.ks
 [kiteshield] 800001050 value: 31, type: ent function: _start
 [kiteshield] 80000114b value: c3, type: ret function: main
 [kiteshield] 800001135 value: 55, type: ent function: main
+[kiteshield] child: PTRACE_TRACEME was successful
+[kiteshield] child: handing control to packed binary
 
 # Program is executing, functions are logged on entry/exit
-[kiteshield] entering function _start, decrypting with key 6763a7cdad212d2c836588cbd5364665
-[kiteshield] entering function __libc_csu_init, decrypting with key 5cfadc245dd1cde1ebb26b434d9c9149
-[kiteshield] leaving function __libc_csu_init via ret at 8000011ac, not decrypting new function at 7f762aff202a (no record)
-[kiteshield] entering function main, decrypting with key 93e4ca24449db836811273a80dea784b
+[kiteshield] entering function _start, decrypting with key de88a921e09d10d04d31889465e10ff6
+[kiteshield] entering function __libc_csu_init, decrypting with key 9df70403e272381c16abd77c22eee9f3
+[kiteshield] leaving function __libc_csu_init via ret at 8000011ac, not decrypting new function at 7f2a0bce502a (no record)
+[kiteshield] entering function main, decrypting with key 856eb81e873f66bf1ac64e2a07791777
+[kiteshield] leaving function main via ret at 80000114b, not decrypting new function at 7f2a0bce509b (no record)
 
 # Actual program output
 Hello World!
 
-# Returning from main and exiting
-[kiteshield] leaving function main via ret at 80000114b, not decrypting new function at 7f762aff209b (no record)
 [kiteshield] child exited with status 0
-
 ```
+
+## Testing
+
+Kiteshield has an extensive set of integration tests to verify correctness
+across several different platforms. See `testing/README.md` for details.
 
 ## License
 
 [MIT](https://github.com/GunshipPenguin/kiteshield/blob/master/LICENSE) © Rhys Rustad-Elliott
+

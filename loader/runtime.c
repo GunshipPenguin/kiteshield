@@ -293,10 +293,12 @@ void runtime_start()
     DIE_IF(
         !WIFSTOPPED(wstatus),
         "child was stopped unexpectedly, exiting");
-    DIE_IF_FMT(
-        WSTOPSIG(wstatus) != SIGTRAP,
-        "child was stopped by unexpected signal %u, exiting",
-        WSTOPSIG(wstatus));
+
+    if (WSTOPSIG(wstatus) != SIGTRAP) {
+      DEBUG("child was sent non-SIGTRAP signal %u");
+      sys_ptrace(PTRACE_CONT, pid, NULL, (void *) (long) WSTOPSIG(wstatus));
+      continue;
+    }
 
     if (antidebug_proc_check_traced()) {
       sys_kill(pid, SIGKILL);

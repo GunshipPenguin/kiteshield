@@ -27,25 +27,25 @@ _start:
   # was probably clobbered by the calls to load/do_fork above, so zero it
   # before we jump to program entry so the libc doesn't register a garbage
   # address as an exit handler.
-  mov $0, %rdx
+  xor %rdx, %rdx
 
   # While we're at it, zero all the other non-privileged registers (besides
   # %rbx, which is holding the program entry point to jump to) that Linux
   # normally zeros before handing control to userspace. Unlike %rdx, this isn't
   # strictly necessary, but we'll do it anyways to make things as deterministic
   # as possible.
-  mov $0, %rcx
-  mov $0, %rsi
-  mov $0, %rdi
-  mov $0, %rbp
-  mov $0, %r8
-  mov $0, %r9
-  mov $0, %r10
-  mov $0, %r11
-  mov $0, %r12
-  mov $0, %r13
-  mov $0, %r14
-  mov $0, %r15
+  xor %rcx, %rcx
+  xor %rsi, %rsi
+  xor %rdi, %rdi
+  xor %rbp, %rbp
+  xor %r8, %r8
+  xor %r9, %r9
+  xor %r10, %r10
+  xor %r11, %r11
+  xor %r12, %r12
+  xor %r13, %r13
+  xor %r14, %r14
+  xor %r15, %r15
 
   pop %rbx
   jmp *%rbx

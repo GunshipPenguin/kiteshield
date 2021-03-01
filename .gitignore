@@ -8,8 +8,9 @@ cmake-build*
 *.swp
 
 # Build artifacts
-obj/
-out/
+packer/obj/
+loader/out/
+testing/out
 packer/kiteshield
 loader/include/obfuscated_strings.h
 

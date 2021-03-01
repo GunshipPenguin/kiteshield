@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
-source output_wrappers.sh
+source testing/output_wrappers.sh
 
 RUN_TEST () {
   TEST_NAME=$1
   EXPECTED_STATUS=$2
 
-  printf "\t%-50s" "Running test $TEST_NAME"
+  printf "%-70s" "Running test $TEST_NAME for $TEST_ID"
 
   TEST_BINARY="${TEST_NAME}.ks"
-  EXPECTED_OUTPUT=$(cat ./tests/expected_outputs/$TEST_NAME)
-  ACTUAL_OUTPUT=$(./out/$TEST_BINARY)
+  EXPECTED_OUTPUT=$(cat ./testing/tests/expected_outputs/$TEST_NAME)
+  ACTUAL_OUTPUT=$($TEST_DIR/$TEST_BINARY)
   ACTUAL_STATUS=$?
 
   if [ $ACTUAL_STATUS -ne $EXPECTED_STATUS ]
@@ -38,6 +38,9 @@ RUN_TEST () {
 
   return 0;
 }
+
+TEST_DIR=$1
+TEST_ID=$2
 
 RUN_TEST helloworld 0
 RUN_TEST nonzero_exit 7

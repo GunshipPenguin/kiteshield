@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source output_wrappers.sh
+source testing/output_wrappers.sh
 
 RUN_CONTAINER_TESTS () {
   IMG=$1
@@ -8,74 +8,90 @@ RUN_CONTAINER_TESTS () {
   CFLAGS=$3
   TEST_ID="$IMG/$CC/\"$CFLAGS\""
 
-  echo_bold "Test suite $TEST_ID"
+  if [ -z "$CFLAGS" ]
+  then
+    TEST_BIN_DIR="testing/out/$IMG/$CC/NOCFLAGS/"
+  else
+    TEST_BIN_DIR="testing/out/$IMG/$CC/${CFLAGS// /_}/"
+  fi
 
-  rm -r testing/out
-  mkdir -p testing/out
+  echo_bold "Starting test suite $TEST_ID"
 
-  printf "\t%-50s" "Building test container..."
-  docker build \
-    --quiet \
-    -t ${IMG}-ks-test \
-    -f testing/dockerfiles/Dockerfile-${IMG} . > /dev/null
+  rm -rf "$TEST_BIN_DIR"
+  mkdir -p "$TEST_BIN_DIR"
+
+  # 2:43 with this
+  printf "%-70s" "Building test container for $TEST_ID"
+  #docker build -t ${IMG}-ks-test - < testing/dockerfiles/Dockerfile-${IMG}
 
   if [ $? -ne 0 ]
   then
-    echo_red -e "\tError building docker image"
+    echo_red -e "Error building docker image"
     exit 1
   else
     echo_green "$CHECK_MARK done"
   fi
 
-  printf "\t%-50s" "Building tests..."
+  printf "%-70s" "Building tests for $TEST_ID"
+  START=$SECONDS
   docker run \
     --rm \
     --cap-add=SYS_PTRACE \
     --user 1000:1000 \
     --volume $(pwd):/kiteshield \
-    --workdir=/kiteshield/testing \
-    ${IMG}-ks-test ./build_test_set.sh $CC $CFLAGS
+    --workdir=/kiteshield \
+    ${IMG}-ks-test testing/build_test_set.sh "$CC" "$CFLAGS" "$TEST_BIN_DIR"
 
   if [ $? -ne 0 ]
   then
-    echo -e "\tFailure building tests"
+    echo -e "Failure building tests"
     exit 1
   else
     echo_green "$CHECK_MARK done"
   fi
+  END=$SECONDS
+  echo "Time needed for build: $((END - START))"
 
-  printf "\t%-50s" "Packing test binaries..."
-  for UNPACKED_BIN in testing/out/*
+  START=$SECONDS
+  printf "%-70s" "Packing test binaries for $TEST_ID"
+  for UNPACKED_BIN in $TEST_BIN_DIR/*
   do
     PACKER_OUTPUT=$(mktemp)
-    packer/kiteshield -v $UNPACKED_BIN ${UNPACKED_BIN}.ks > "$PACKER_OUTPUT"
+    packer/kiteshield -v $UNPACKED_BIN ${UNPACKED_BIN}.ks > "$PACKER_OUTPUT" 2>&1
     if [ $? -ne 0 ]
     then
-      echo -e "\tFailure packing test binary $UNPACKED_BIN for $TEST_ID"
-      echo -e "\t*******PACKER OUTPUT*******"
+      echo_red "$X_MARK failed"
+      echo -e "*******PACKER OUTPUT*******"
       cat $PACKER_OUTPUT
-      echo -e "\t*******END PACKER OUTPUT*******"
+      echo -e "*******END PACKER OUTPUT*******"
       exit 1
     fi
   done
 
   echo_green "$CHECK_MARK done"
 
+  END=$SECONDS
+  echo "Time needed for pack: $((END - START))"
+
+  START=$SECONDS
   docker run \
     --rm \
     --cap-add=SYS_PTRACE \
     --user 1000:1000 \
     --volume $(pwd):/kiteshield \
-    --workdir=/kiteshield/testing \
-    ${IMG}-ks-test ./run_test_set.sh
+    --workdir=/kiteshield \
+    ${IMG}-ks-test testing/run_test_set.sh $TEST_BIN_DIR $TEST_ID
 
   if [ $? -ne 0 ]
   then
-    echo_red "\tFailure running tests"
+    echo_red "Failure running tests"
     exit 1
   else
-    echo_green "\tAll tests passed for suite $TEST_ID"
+    echo_green "All tests passed for suite $TEST_ID"
   fi
+
+  END=$SECONDS
+  echo "Time needed for test: $((END - START))"
 }
 
 RUN_CONTAINER_TESTS_CFLAGS () {
@@ -84,51 +100,4 @@ RUN_CONTAINER_TESTS_CFLAGS () {
   RUN_CONTAINER_TESTS $1 $2 "-static -O3"
 }
 
-cd ..
-
-make clean
-make
-
-RUN_CONTAINER_TESTS_CFLAGS centos-8 gcc
-RUN_CONTAINER_TESTS_CFLAGS centos-8 clang
-
-RUN_CONTAINER_TESTS_CFLAGS centos-7 gcc
-RUN_CONTAINER_TESTS_CFLAGS centos-7 clang
-
-RUN_CONTAINER_TESTS_CFLAGS alpine gcc
-RUN_CONTAINER_TESTS_CFLAGS alpine clang
-
-RUN_CONTAINER_TESTS_CFLAGS fedora gcc
-RUN_CONTAINER_TESTS_CFLAGS fedora clang
-
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-trusty gcc
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-trusty clang-3.6
-
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-xenial gcc
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-xenial clang-3.5
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-xenial clang-4.0
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-xenial clang-5.0
-
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic gcc-5
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic gcc-6
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic gcc-7
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic gcc-8
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic clang-4.0
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic clang-5.0
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic clang-6.0
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic clang-7
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic clang-8
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic clang-9
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-bionic clang-10
-
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal gcc-7
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal gcc-8
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal gcc-9
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal gcc-10
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal clang-6.0
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal clang-7
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal clang-8
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal clang-9
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal clang-10
-RUN_CONTAINER_TESTS_CFLAGS ubuntu-focal clang-11
-
+RUN_CONTAINER_TESTS_CFLAGS "$@"

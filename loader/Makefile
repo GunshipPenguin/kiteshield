@@ -4,12 +4,14 @@ LDFLAGS = -no-pie
 SRCS = $(wildcard *.[c,S] ../common/*.c)
 OBJS = $(addprefix out/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
 
+OBFUSCATED_STRINGS_FILE = include/obfuscated_strings.h
+
 .PHONY: all output_dirs debug clean
 
 debug: CFLAGS += -DDEBUG_OUTPUT -DNO_ANTIDEBUG
 debug-antidebug: CFLAGS += -DDEBUG_OUTPUT
 
-all: output_dirs include/obfuscated_strings.h out/loader_header.h
+all: output_dirs $(OBFUSCATED_STRINGS_FILE) out/loader_header.h
 
 debug: all
 debug-antidebug: all
@@ -17,8 +19,8 @@ debug-antidebug: all
 output_dirs:
 	mkdir -p out
 
-include/obfuscated_strings.h:
-	python3 string_obfuscation.py > include/obfuscated_strings.h
+$(OBFUSCATED_STRINGS_FILE):
+	python3 string_obfuscation.py > $(OBFUSCATED_STRINGS_FILE)
 
 out/loader_header.h: $(OBJS)
 	$(LD) $(LDFLAGS) $(OBJS) -T link.lds -o out/loader-elf
@@ -36,4 +38,5 @@ out/%.o: %.S
 
 clean:
 	rm -rf out/
+	rm -f $(OBFUSCATED_STRINGS_FILE)
 

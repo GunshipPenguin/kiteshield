@@ -3,13 +3,21 @@
 #include "loader/include/anti_debug.h"
 
 int sigtrap_counter = 0;
-void restorer();
 
 void sigtrap_handler(int sig)
 {
   DEBUG("caught SIGTRAP, incrementing SIGTRAP count (antidebug)");
   sigtrap_counter++;
 }
+
+/* Simple signal restorer that simply calls sigreturn(2). Normally this is
+ * handled by glibc, but we need to explicitly declare and pass it in to
+ * rt_sigaction(2) given our freestanding environment.
+ */
+void restorer();
+asm ("restorer:\n"
+     "  mov $15, %rax\n"
+     "  syscall");
 
 void antidebug_signal_init()
 {

@@ -8,17 +8,17 @@
 #include "loader/include/signal.h"
 #include "loader/include/anti_debug.h"
 
-#define FCN_ARR_START ((struct function *) (((struct trap_point *) tp_info.data) + tp_info.ntps))
+#define FCN_ARR_START ((struct function *) (((struct trap_point *) rt_info.data) + rt_info.ntraps))
 #define FCN(tp) ((struct function *) (FCN_ARR_START + tp->fcn_i))
 
-struct trap_point_info tp_info __attribute__((section(".tp_info")));
+struct runtime_info rt_info __attribute__((section(".rt_info")));
 
 /* Defined in loader.c */
 extern struct rc4_key obfuscated_key;
 
 struct trap_point *get_tp(uint64_t addr) {
-  struct trap_point *arr = (struct trap_point *) tp_info.data;
-  for (int i = 0; i < tp_info.ntps; i++) {
+  struct trap_point *arr = (struct trap_point *) rt_info.data;
+  for (int i = 0; i < rt_info.ntraps; i++) {
     if (arr[i].addr == addr) {
       return &arr[i];
     }
@@ -31,7 +31,7 @@ static struct function *get_fcn_at_addr(uint64_t addr)
 {
   struct function *arr = FCN_ARR_START;
 
-  for (int i = 0; i < tp_info.nfuncs; i++) {
+  for (int i = 0; i < rt_info.nfuncs; i++) {
     struct function *curr = &arr[i];
     if (curr->start_addr <= addr && (curr->start_addr + curr->len) > addr)
       return curr;
@@ -247,18 +247,19 @@ static void handle_trap(pid_t pid, int wstatus)
 void runtime_start()
 {
   DEBUG("starting ptrace runtime");
-  obf_deobf_tp_info(&tp_info);
+  obf_deobf_rt_info(&rt_info);
 
-  DEBUG_FMT("number of trap points: %u", tp_info.ntps);
-  DEBUG_FMT("number of encrypted functions: %u", tp_info.nfuncs);
+  DEBUG_FMT("number of trap points: %u", rt_info.ntraps);
+  DEBUG_FMT("number of encrypted functions: %u", rt_info.nfuncs);
 
   antidebug_signal_init();
 
 #ifdef DEBUG_OUTPUT
   DEBUG("list of trap points:");
-  for (int i = 0; i < tp_info.ntps; i++) {
-    struct trap_point *tp = ((struct trap_point *) tp_info.data) + i;
-    const char *type = tp->type == TP_JMP ? "jmp" : tp->type == TP_RET ? "ret" : "ent";
+  for (int i = 0; i < rt_info.ntraps; i++) {
+    struct trap_point *tp = ((struct trap_point *) rt_info.data) + i;
+    const char *type =
+      tp->type == TP_JMP ? "jmp" : tp->type == TP_RET ? "ret" : "ent";
     DEBUG_FMT("%p value: %hhx, type: %s function: %s",
               tp->addr, tp->value, type, FCN(tp)->name);
   }

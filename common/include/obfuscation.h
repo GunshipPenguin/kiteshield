@@ -8,8 +8,8 @@ void obf_deobf_outer_key(struct rc4_key *old_key,
                          unsigned char *loader_bin,
                          unsigned int loader_bin_size);
 
-void obf_deobf_tp_info(
-    struct trap_point_info *tp_info);
+void obf_deobf_rt_info(
+    struct runtime_info *rt_info);
 
 #endif /* __KITESHIELD_OBFUSCATION_H */
 

@@ -44,7 +44,9 @@ struct rc4_key {
   uint8_t bytes[KEY_SIZE];
 } __attribute__((packed));
 
-/* Represents a function that contains a trap point */
+/* Represents a function that has been encrypted/instrumented and that the
+ * runtime knows about.
+ */
 struct function {
   uint64_t start_addr;
   uint32_t len;
@@ -73,8 +75,7 @@ enum tp_type {
 /* Represents a point in code at which we injected a single byte int3
  * instruction so that the program will trap into the ptrace runtime to decrypt
  * or encrypt the current function when entering or returning from it
- * respectively. We store a single trap_point_info struct at the end of the
- * loader code so the runtime has access to this info.
+ * respectively.
  */
 struct trap_point {
   /* Address in program code of this trap point */
@@ -92,9 +93,13 @@ struct trap_point {
   int fcn_i;
 } __attribute__((packed));
 
-struct trap_point_info {
+/* Struct encompassing all the function and trap point information the runtime
+ * needs to do its job. One of these is stored at a predefined offset via the
+ * linker script so that the runtime can access it.
+ */
+struct runtime_info {
   int nfuncs;
-  int ntps;
+  int ntraps;
   uint8_t data[];
 } __attribute__((packed));
 

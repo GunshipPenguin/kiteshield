@@ -260,13 +260,13 @@ static int is_instrumentable_jmp(
 static int process_func(
     struct mapped_elf *elf,
     Elf64_Sym *func_sym,
-    struct trap_point_info *tp_info,
+    struct runtime_info *rt_info,
     struct function *func_arr,
     struct trap_point *tp_arr)
 {
   uint8_t *func_start = elf_get_sym_location(elf, func_sym);
   uint64_t base_addr = get_base_addr(elf->ehdr);
-  struct function *fcn = &func_arr[tp_info->nfuncs];
+  struct function *fcn = &func_arr[rt_info->nfuncs];
 
   fcn->start_addr = base_addr + func_sym->st_value;
   fcn->len = func_sym->st_size;
@@ -305,14 +305,14 @@ static int process_func(
 
     if (is_jmp_to_instrument || is_ret_to_instrument) {
       struct trap_point *tp =
-        (struct trap_point *) &tp_arr[tp_info->ntps++];
+        (struct trap_point *) &tp_arr[rt_info->ntraps++];
 
       verbose("\tinstrumenting %s instr at address %p", ix.Mnemonic, addr, off);
 
       tp->addr = addr;
       tp->type = is_ret_to_instrument ? TP_RET : TP_JMP;
       tp->value = *code_ptr;
-      tp->fcn_i = tp_info->nfuncs;
+      tp->fcn_i = rt_info->nfuncs;
       *code_ptr = INT3;
     }
 
@@ -321,17 +321,17 @@ static int process_func(
 
   /* Instrument entry point */
   struct trap_point *tp =
-    (struct trap_point *) &tp_arr[tp_info->ntps++];
+    (struct trap_point *) &tp_arr[rt_info->ntraps++];
   tp->addr = base_addr + func_sym->st_value;
   tp->type = TP_FCN_ENTRY;
   tp->value = *func_start;
-  tp->fcn_i = tp_info->nfuncs;
+  tp->fcn_i = rt_info->nfuncs;
 
   encrypt_memory_range(&fcn->key, func_start, func_sym->st_size);
 
   *func_start = INT3;
 
-  tp_info->nfuncs++;
+  rt_info->nfuncs++;
 
   return 0;
 }
@@ -342,7 +342,7 @@ static int process_func(
  */
 static int apply_inner_encryption(
     struct mapped_elf *elf,
-    struct trap_point_info **tp_info)
+    struct runtime_info **rt_info)
 {
   info("applying inner encryption");
 
@@ -356,9 +356,9 @@ static int apply_inner_encryption(
     return -1;
   }
 
-  CK_NEQ_PERROR(*tp_info = malloc(sizeof(**tp_info)), NULL);
-  (*tp_info)->nfuncs = 0;
-  (*tp_info)->ntps = 0;
+  CK_NEQ_PERROR(*rt_info = malloc(sizeof(**rt_info)), NULL);
+  (*rt_info)->nfuncs = 0;
+  (*rt_info)->ntraps = 0;
 
   /* "16 MiB ought to be enough for anybody" */
   struct function *fcn_arr;
@@ -442,21 +442,21 @@ static int apply_inner_encryption(
         continue;
     }
 
-    if (process_func(elf, sym, *tp_info, fcn_arr, tp_arr) == -1) {
+    if (process_func(elf, sym, *rt_info, fcn_arr, tp_arr) == -1) {
       err("error instrumenting function %s", elf_get_sym_name(elf, sym));
       return -1;
     }
   }
 
-  size_t tp_arr_sz = sizeof(struct trap_point) * (*tp_info)->ntps;
-  size_t fcn_arr_sz = sizeof(struct function) * (*tp_info)->nfuncs;
+  size_t tp_arr_sz = sizeof(struct trap_point) * (*rt_info)->ntraps;
+  size_t fcn_arr_sz = sizeof(struct function) * (*rt_info)->nfuncs;
   CK_NEQ_PERROR(
-      *tp_info = realloc(*tp_info,
-              sizeof(struct trap_point_info) + tp_arr_sz + fcn_arr_sz),
+      *rt_info = realloc(*rt_info,
+              sizeof(struct runtime_info) + tp_arr_sz + fcn_arr_sz),
       NULL);
 
-  memcpy((*tp_info)->data, tp_arr, tp_arr_sz);
-  memcpy((*tp_info)->data + tp_arr_sz, fcn_arr, fcn_arr_sz);
+  memcpy((*rt_info)->data, tp_arr, tp_arr_sz);
+  memcpy((*rt_info)->data + tp_arr_sz, fcn_arr, fcn_arr_sz);
 
   free(tp_arr);
   free(fcn_arr);
@@ -489,28 +489,28 @@ static int apply_outer_encryption(
   return 0;
 }
 
-static void *inject_tp_info(struct trap_point_info *tp_info, size_t *new_size)
+static void *inject_rt_info(struct runtime_info *rt_info, size_t *new_size)
 {
-  size_t tp_info_size = sizeof(struct trap_point_info) +
-                        sizeof(struct trap_point) * tp_info->ntps +
-                        sizeof(struct function) * tp_info->nfuncs;
-  void *loader_tp_info = malloc(sizeof(loader_x86_64) + tp_info_size);
-  obf_deobf_tp_info(tp_info);
-  memcpy(loader_tp_info, loader_x86_64, sizeof(loader_x86_64));
+  size_t rt_info_size = sizeof(struct runtime_info) +
+                        sizeof(struct trap_point) * rt_info->ntraps +
+                        sizeof(struct function) * rt_info->nfuncs;
+  void *loader_rt_info = malloc(sizeof(loader_x86_64) + rt_info_size);
+  obf_deobf_rt_info(rt_info);
+  memcpy(loader_rt_info, loader_x86_64, sizeof(loader_x86_64));
   info(
       "injected trap point info into loader (old size: %u new size: %u)",
       sizeof(loader_x86_64), *new_size);
 
 
-  /* subtract sizeof(struct trap_point_info) here to ensure we overwrite the
+  /* subtract sizeof(struct runtime_info) here to ensure we overwrite the
    * non flexible-array portion of the struct that the linker actually puts in
    * the code. */
-  memcpy(loader_tp_info +
-         sizeof(loader_x86_64) - sizeof(struct trap_point_info),
-         tp_info, tp_info_size);
+  memcpy(loader_rt_info +
+         sizeof(loader_x86_64) - sizeof(struct runtime_info),
+         rt_info, rt_info_size);
 
-  *new_size = sizeof(loader_x86_64) + tp_info_size;
-  return loader_tp_info;
+  *new_size = sizeof(loader_x86_64) + rt_info_size;
+  return loader_rt_info;
 }
 
 /* Removes everything not needed for program execution from the binary, note
@@ -616,18 +616,18 @@ int main(int argc, char *argv[])
   }
 
   /* Apply inner encryption if requested */
-  size_t loader_tp_info_size = sizeof(loader_x86_64);
-  void *loader_tp_info = loader_x86_64;
+  size_t loader_rt_info_size = sizeof(loader_x86_64);
+  void *loader_rt_info = loader_x86_64;
   if (use_inner_encryption) {
-    struct trap_point_info *tp_info = NULL;
-    ret = apply_inner_encryption(&elf, &tp_info);
+    struct runtime_info *rt_info = NULL;
+    ret = apply_inner_encryption(&elf, &rt_info);
     if (ret == -1) {
       err("could not apply inner encryption");
       return -1;
     }
 
     /* Inject trap point info into loader */
-    loader_tp_info = inject_tp_info(tp_info, &loader_tp_info_size);
+    loader_rt_info = inject_rt_info(rt_info, &loader_rt_info_size);
   } else {
     info("not applying inner encryption due to -n flag");
   }
@@ -639,7 +639,7 @@ int main(int argc, char *argv[])
   }
 
   /* Apply outer encryption */
-  ret = apply_outer_encryption(&elf, loader_tp_info, loader_tp_info_size);
+  ret = apply_outer_encryption(&elf, loader_rt_info, loader_rt_info_size);
   if (ret == -1) {
     err("could not apply outer encryption");
     return -1;
@@ -648,8 +648,8 @@ int main(int argc, char *argv[])
   /* Write output ELF */
   FILE *output_file;
   CK_NEQ_PERROR(output_file = fopen(output_path, "w"), NULL);
-  ret = produce_output_elf(output_file, &elf, loader_tp_info,
-                           loader_tp_info_size);
+  ret = produce_output_elf(output_file, &elf, loader_rt_info,
+                           loader_rt_info_size);
   if (ret == -1) {
     err("could not produce output ELF");
     return -1;

@@ -118,7 +118,6 @@ kiteshield
 │   ├── link.lds                         # Linker script for building loader
 │   ├── loader.c                         # Binary loading / mapping code (userspace exec)
 │   ├── Makefile
-│   ├── outer_key_deobfuscation.c        # Key deobfuscation convenience wrapper
 │   ├── runtime.c                        # Runtime engine code
 │   ├── string.c                         # String utilities (eg. strncat)
 │   ├── string_obfuscation.py            # String obfuscation helper script

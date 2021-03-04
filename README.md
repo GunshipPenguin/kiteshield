@@ -209,7 +209,7 @@ $ ./packed.ks
 [kiteshield] interpreter base address is b00000000
 [kiteshield] mapped LOAD section from fd at b00001000
 [kiteshield] mapped LOAD section from fd at b0001f000
-[kiteshield] Mapped extra space for static data (.bss) at b00029000 len 400
+[kiteshield] mapped extra space for static data (.bss) at b00029000 len 400
 [kiteshield] mapped LOAD section from fd at b00027000
 [kiteshield] binary base address is 800000000
 

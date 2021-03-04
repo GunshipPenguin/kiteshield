@@ -117,7 +117,7 @@ static void *map_load_section_from_fd(int fd, Elf64_Phdr phdr, int absolute)
       DIE_IF((long) extra_space < 0,
              "mmap failure while mapping extra space for static vars");
 
-      DEBUG_FMT("Mapped extra space for static data (.bss) at %p len %u",
+      DEBUG_FMT("mapped extra space for static data (.bss) at %p len %u",
                 extra_space, extra_space_needed);
     }
 

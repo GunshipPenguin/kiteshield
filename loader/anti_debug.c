@@ -50,3 +50,39 @@ void antidebug_prctl_set_nondumpable()
   DIE_IF_FMT(ret != 0, "prctl(PR_SET_DUMPABLE, 0) failed with %d", ret);
 }
 
+/* Sets the environment variables LD_PRELOAD, LD_AUDIT and LD_DEBUG (if
+ * present) to empty strings.
+ *
+ * The first two of these can be used by a reverse engineer to run custom code
+ * in dynamically linked packed program's context, the last can be set to to
+ * provide potentially useful information on linker operations.
+ */
+void antidebug_remove_ld_env_vars(void *entry_stacktop)
+{
+#ifdef NO_ANTIDEBUG
+  return;
+#endif
+
+  char **environ = entry_stacktop;
+
+  /* Advance past argc */
+  environ++;
+
+  /* Advance past argv */
+  while (*(++environ) != 0);
+  environ++;
+
+  for (char **v = environ; *v != NULL; v++) {
+    if (strncmp(*v, DEOBF_STR(LD_PRELOAD), 9) == 0) {
+      DEBUG_FMT("LD_PRELOAD is set to %s, removing", *v + 11);
+      (*v)[11] = '\0';
+    } else if (strncmp(*v, DEOBF_STR(LD_AUDIT), 7) == 0) {
+      DEBUG_FMT("LD_AUDIT is set to %s, removing", *v + 9);
+      (*v)[9] = '\0';
+    } else if (strncmp(*v, DEOBF_STR(LD_DEBUG), 7) == 0) {
+      DEBUG_FMT("LD_DEBUG is set to %s, removing", *v + 9);
+      (*v)[9] = '\0';
+    }
+  }
+}
+

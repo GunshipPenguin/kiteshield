@@ -14,6 +14,11 @@ STRINGS = {
         'SLASH_STATUS' : '/status',
         'TRACERPID_PROC_FIELD': 'TracerPid:',
 
+        # loader/anti_debug.c
+        'LD_PRELOAD' : 'LD_PRELOAD',
+        'LD_AUDIT' : 'LD_AUDIT',
+        'LD_DEBUG' : 'LD_DEBUG',
+
         # loader/string.c
         'HEX_DIGITS': '0123456789abcdef'
 }

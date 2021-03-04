@@ -134,6 +134,7 @@ antidebug_rlimit_set_zero_core()
 
 void antidebug_signal_init();
 void antidebug_prctl_set_nondumpable();
+void antidebug_remove_ld_env_vars(void *entry_stacktop);
 
 #endif /* __KITESHIELD_ANTI_DEBUG_H */
 

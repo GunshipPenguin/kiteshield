@@ -309,6 +309,8 @@ void *load(void *entry_stacktop)
   if (antidebug_proc_check_traced())
     DIE(TRACED_MSG);
 
+  antidebug_remove_ld_env_vars(entry_stacktop);
+
   /* Disable core dumps via rlimit here before we start doing sensitive stuff
    * like key deobfuscation and binary decryption. Child process should
    * inherit these limits after the fork, although it wouldn't hurt to call

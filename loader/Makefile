@@ -25,7 +25,7 @@ $(OBFUSCATED_STRINGS_FILE):
 out/loader_header.h: $(OBJS)
 	$(LD) $(LDFLAGS) $(OBJS) -T link.lds -o out/loader-elf
 	objcopy -O binary out/loader-elf out/loader.bin
-	cat out/loader.bin | python3 bin_to_header.py loader_x86_64 > out/loader_header.h
+	cat out/loader.bin | python3 bin_to_header.py GENERATED_LOADER > out/generated_loader.h
 
 out/%.o: %.c
 	$(CC) $(CFLAGS) $< -o $@

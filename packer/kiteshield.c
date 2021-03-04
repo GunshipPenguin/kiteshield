@@ -17,7 +17,7 @@
 #include "common/include/defs.h"
 #include "packer/include/elfutils.h"
 
-#include "loader/out/loader_header.h"
+#include "loader/out/generated_loader.h"
 
 /* Convenience macro for error checking libc calls */
 #define CK_NEQ_PERROR(stmt, err)                                              \
@@ -494,22 +494,22 @@ static void *inject_rt_info(struct runtime_info *rt_info, size_t *new_size)
   size_t rt_info_size = sizeof(struct runtime_info) +
                         sizeof(struct trap_point) * rt_info->ntraps +
                         sizeof(struct function) * rt_info->nfuncs;
-  void *loader_rt_info = malloc(sizeof(loader_x86_64) + rt_info_size);
+  void *loader_rt_info = malloc(sizeof(GENERATED_LOADER) + rt_info_size);
   obf_deobf_rt_info(rt_info);
-  memcpy(loader_rt_info, loader_x86_64, sizeof(loader_x86_64));
+  memcpy(loader_rt_info, GENERATED_LOADER, sizeof(GENERATED_LOADER));
   info(
       "injected trap point info into loader (old size: %u new size: %u)",
-      sizeof(loader_x86_64), *new_size);
+      sizeof(GENERATED_LOADER), *new_size);
 
 
   /* subtract sizeof(struct runtime_info) here to ensure we overwrite the
    * non flexible-array portion of the struct that the linker actually puts in
    * the code. */
   memcpy(loader_rt_info +
-         sizeof(loader_x86_64) - sizeof(struct runtime_info),
+         sizeof(GENERATED_LOADER) - sizeof(struct runtime_info),
          rt_info, rt_info_size);
 
-  *new_size = sizeof(loader_x86_64) + rt_info_size;
+  *new_size = sizeof(GENERATED_LOADER) + rt_info_size;
   return loader_rt_info;
 }
 
@@ -616,8 +616,8 @@ int main(int argc, char *argv[])
   }
 
   /* Apply inner encryption if requested */
-  size_t loader_rt_info_size = sizeof(loader_x86_64);
-  void *loader_rt_info = loader_x86_64;
+  size_t loader_rt_info_size = sizeof(GENERATED_LOADER);
+  void *loader_rt_info = GENERATED_LOADER;
   if (use_inner_encryption) {
     struct runtime_info *rt_info = NULL;
     ret = apply_inner_encryption(&elf, &rt_info);

@@ -13,9 +13,6 @@
 
 struct runtime_info rt_info __attribute__((section(".rt_info")));
 
-/* Defined in loader.c */
-extern struct rc4_key obfuscated_key;
-
 struct trap_point *get_tp(uint64_t addr) {
   struct trap_point *arr = (struct trap_point *) rt_info.data;
   for (int i = 0; i < rt_info.ntraps; i++) {

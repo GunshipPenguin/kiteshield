@@ -38,11 +38,11 @@ off_t sys_lseek(int fd, off_t offset, int whence)
   off_t ret = 0;
 
   asm("mov $8, %%rax\n"
-      "mov %0, %%rdi\n"
-      "mov %1, %%rsi\n"
-      "mov %2, %%edx\n"
+      "mov %1, %%rdi\n"
+      "mov %2, %%esi\n"
+      "mov %3, %%edx\n"
       "syscall\n"
-      "mov %%rax, %3"
+      "mov %%rax, %0"
   :   "=rm" (ret)
   :   "rm" (fd), "rm" (offset), "rm" (whence));
 

@@ -4,8 +4,8 @@ A packer/protector for x86-64 ELF binaries on Linux. Kiteshield wraps ELF
 binaries with multiple layers of encryption and injects them with loader code
 that decrypts, maps, and executes the packed binary entirely in userspace. A
 ptrace-based runtime engine ensures that only functions in the current call
-stack are decrypted at any given time and additionally additionally implements a
-variety of anti-debugging techniques in order to make packed binaries as hard to
+stack are decrypted at any given time and additionally implements a variety of
+anti-debugging techniques in order to make packed binaries as hard to
 reverse-engineer as possible.
 
 See the [Architecture](#architecture) and [Codebase Layout](#codebase-layout)

@@ -191,6 +191,7 @@ static int get_random_bytes(void *buf, size_t len)
   FILE *f;
   CK_NEQ_PERROR(f = fopen("/dev/urandom", "r"), NULL);
   CK_NEQ_PERROR(fread(buf, len, 1, f), 0);
+  CK_NEQ_PERROR(fclose(f), EOF);
 
   return 0;
 }

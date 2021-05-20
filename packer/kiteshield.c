@@ -371,6 +371,33 @@ static int apply_inner_encryption(
     if (ELF64_ST_TYPE(sym->st_info) != STT_FUNC)
       continue;
 
+    /* Statically linked binaries contain several function symbols that alias
+     * each other (_IO_vfprintf and fprintf in glibc for instance).
+     * Furthermore, there can occasionally be functions that overlap other
+     * functions at the ELF level due to weird optimizations and/or custom
+     * linker logic (confirmed present in the CentOS 7 glibc-static package)
+     *
+     * Detect and skip them here as to not double-encrypt.
+     */
+    struct function *alias = NULL;
+    for (size_t i = 0; i < (*rt_info)->nfuncs; i++) {
+      struct function *fcn = &fcn_arr[i];
+
+      /* If there's any overlap at all between something we've already
+       * encrypted, abort */
+      if ((fcn->start_addr <= (sym->st_value + sym->st_size - 1)) &&
+          ((fcn->start_addr + fcn->len - 1) >= sym->st_value)) {
+        alias = fcn;
+        break;
+      }
+    }
+
+    if (alias) {
+        verbose(
+            "not encrypting function %s as it aliases or overlaps one already encrypted at %p of len %u",
+            elf_get_sym_name(elf, sym), alias->start_addr, alias->len);
+        continue;
+    }
 
     /* Skip instrumenting/encrypting functions in cases where it simply will
      * not work or has the potential to mess things up. Specifically, this
@@ -429,17 +456,6 @@ static int apply_inner_encryption(
       verbose("not encrypting function %s due to first instruction being jmp/ret/call",
               elf_get_sym_name(elf, sym));
       continue;
-    }
-
-    /* Statically linked binaries contain several function symbols that alias
-     * eachother (_IO_vfprintf and fprintf in glibc for instance). Detect and
-     * skip them here as to not double-encrypt.
-     */
-    const Elf64_Sym *alias = elf_get_first_fcn_alias(elf, sym);
-    if (alias) {
-        verbose("not encrypting function %s as it aliases %s",
-            elf_get_sym_name(elf, sym), elf_get_sym_name(elf, alias));
-        continue;
     }
 
     if (process_func(elf, sym, *rt_info, fcn_arr, tp_arr) == -1) {

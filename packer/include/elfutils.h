@@ -46,13 +46,8 @@ const char *elf_get_sym_name(
     const struct mapped_elf *elf,
     const Elf64_Sym *sym);
 
-const Elf64_Sym *elf_get_first_fcn_alias(
-    const struct mapped_elf *elf,
-    const Elf64_Sym *sym);
-
 int elf_sym_in_text(
     const struct mapped_elf *elf,
     const Elf64_Sym *func);
 
 #endif /* __KITESHIELD_ELFUTILS_H */
-

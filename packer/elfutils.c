@@ -86,19 +86,3 @@ const char *elf_get_sym_name(
 {
   return (const char *) (elf->start + elf->strtab->sh_offset + sym->st_name);
 }
-
-const Elf64_Sym *elf_get_first_fcn_alias(
-    const struct mapped_elf *elf,
-    const Elf64_Sym *sym)
-{
-  ELF_FOR_EACH_SYMBOL(elf, cursor) {
-    if (ELF64_ST_TYPE(cursor->st_info) == STT_FUNC &&
-        sym->st_value == cursor->st_value &&
-        sym != cursor) {
-      return cursor;
-    }
-  }
-
-  return NULL;
-}
-

@@ -292,7 +292,7 @@ void runtime_start()
         "child was stopped unexpectedly, exiting");
 
     if (WSTOPSIG(wstatus) != SIGTRAP) {
-      DEBUG("child was sent non-SIGTRAP signal %u");
+      DEBUG_FMT("child was sent non-SIGTRAP signal %u", WSTOPSIG(wstatus));
       sys_ptrace(PTRACE_CONT, pid, NULL, (void *) (long) WSTOPSIG(wstatus));
       continue;
     }

@@ -385,8 +385,8 @@ static int apply_inner_encryption(
 
       /* If there's any overlap at all between something we've already
        * encrypted, abort */
-      if ((fcn->start_addr <= (sym->st_value + sym->st_size - 1)) &&
-          ((fcn->start_addr + fcn->len - 1) >= sym->st_value)) {
+      if ((fcn->start_addr < (sym->st_value + sym->st_size)) &&
+          ((fcn->start_addr + fcn->len) > sym->st_value)) {
         alias = fcn;
         break;
       }

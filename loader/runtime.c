@@ -57,7 +57,7 @@ static void single_step(pid_t pid)
   int wstatus;
   sys_wait4(&wstatus);
 
-  DIE_IF_FMT(pid == -1, "wait4 syscall failed with error %d", pid);
+  DIE_IF_FMT(pid < 0, "wait4 syscall failed with error %d", pid);
   DIE_IF_FMT(
       WIFEXITED(wstatus),
       "child exited with status %u during single step",
@@ -277,7 +277,7 @@ void runtime_start()
     int wstatus;
     pid_t pid = sys_wait4(&wstatus);
 
-    DIE_IF_FMT(pid == -1, "wait4 syscall failed with error %d", pid);
+    DIE_IF_FMT(pid < 0, "wait4 syscall failed with error %d", pid);
 
     if (WIFEXITED(wstatus)) {
       DEBUG_FMT("child exited with status %u", WEXITSTATUS(wstatus));

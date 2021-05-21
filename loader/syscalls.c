@@ -8,7 +8,7 @@ ssize_t sys_write(int fd, const char *s, size_t count)
   asm("mov $1, %%rax\n"
       "mov %1, %%edi\n"
       "mov %2, %%rsi\n"
-      "mov %3, %%edx\n"
+      "mov %3, %%rdx\n"
       "syscall\n"
       "mov %%rax, %0"
   :   "=rm" (ret)
@@ -22,9 +22,9 @@ ssize_t sys_read(int fd, void *buf, size_t count)
   ssize_t ret = 0;
 
   asm("mov $0, %%rax\n"
-      "mov %1, %%rdi\n"
+      "mov %1, %%edi\n"
       "mov %2, %%rsi\n"
-      "mov %3, %%edx\n"
+      "mov %3, %%rdx\n"
       "syscall\n"
       "mov %%rax, %0"
   :   "=rm" (ret)
@@ -38,8 +38,8 @@ off_t sys_lseek(int fd, off_t offset, int whence)
   off_t ret = 0;
 
   asm("mov $8, %%rax\n"
-      "mov %1, %%rdi\n"
-      "mov %2, %%esi\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%rsi\n"
       "mov %3, %%edx\n"
       "syscall\n"
       "mov %%rax, %0"
@@ -54,9 +54,9 @@ int sys_open(const char *pathname, int flags, int mode)
   int ret = 0;
 
   asm("mov $2, %%rax\n"
-      "movq %1, %%rdi\n"
-      "mov %2, %%rsi\n"
-      "mov %3, %%rdx\n"
+      "mov %1, %%rdi\n"
+      "mov %2, %%esi\n"
+      "mov %3, %%edx\n"
       "syscall\n"
       "mov %%eax, %0"
   :   "+rm" (ret)
@@ -70,7 +70,7 @@ int sys_close(int fd)
   int ret = 0;
 
   asm("mov $3, %%rax\n"
-      "movq %1, %%rdi\n"
+      "mov %1, %%edi\n"
       "syscall\n"
       "mov %%eax, %0"
   :   "+rm" (ret)
@@ -82,7 +82,7 @@ int sys_close(int fd)
 void sys_exit(int status)
 {
   asm("mov $60, %%rax\n"
-      "mov %0, %%rdi\n"
+      "mov %0, %%edi\n"
       "syscall"
   :
   :   "rm" (status));
@@ -118,12 +118,12 @@ int sys_mprotect(void *addr, size_t len, int prot)
 {
   int ret = 0;
 
-  asm("movq $10, %%rax\n"
-      "movq %1, %%rdi\n"
-      "movq %2, %%rsi\n"
-      "movl %3, %%edx\n"
+  asm("mov $10, %%rax\n"
+      "mov %1, %%rdi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%edx\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :   "rm" (addr), "rm" (len), "rm" (prot));
 
@@ -144,13 +144,13 @@ long sys_ptrace(
    *
    * This function exposes the kernel-level interface.
    */
-  asm("movq $101, %%rax\n"
-      "movl %1, %%edi\n"
-      "movq %2, %%rsi\n"
-      "movq %3, %%rdx\n"
-      "movq %4, %%r10\n"
+  asm("mov $101, %%rax\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%esi\n"
+      "mov %3, %%rdx\n"
+      "mov %4, %%r10\n"
       "syscall\n"
-      "movq %%rax, %0\n"
+      "mov %%rax, %0\n"
   :   "+rm" (ret)
   :   "rm" (request), "rm" (pid), "rm" (addr), "rm" (data));
 
@@ -163,13 +163,13 @@ pid_t sys_wait4(int *wstatus)
 
   /* We pass NULL for the pid/options/rusage arguments to simpify the function
    * definition (we don't currently have a need for these arguments) */
-  asm("movq $61, %%rax\n"
-      "movq $-1, %%rdi\n"
-      "movq %1, %%rsi\n"
-      "movq $0, %%rdx\n"
-      "movq $0, %%r10\n"
+  asm("mov $61, %%rax\n"
+      "mov $-1, %%rdi\n"
+      "mov %1, %%rsi\n"
+      "mov $0, %%rdx\n"
+      "mov $0, %%r10\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :   "rm" (wstatus));
 
@@ -180,9 +180,9 @@ pid_t sys_fork()
 {
   pid_t ret = 0;
 
-  asm("movq $57, %%rax\n"
+  asm("mov $57, %%rax\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :);
 
@@ -193,11 +193,11 @@ int sys_kill(pid_t pid, int sig)
 {
   pid_t ret = 0;
 
-  asm("movq $62, %%rax\n"
-      "movl %1, %%edi\n"
-      "movl %2, %%esi\n"
+  asm("mov $62, %%rax\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%esi\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :   "rm" (pid), "rm" (sig));
 
@@ -208,9 +208,9 @@ pid_t sys_getpid()
 {
   pid_t ret = 0;
 
-  asm("movq $39, %%rax\n"
+  asm("mov $39, %%rax\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :);
 
@@ -225,13 +225,13 @@ int sys_rt_sigaction(
   int ret = 0;
   size_t sigsetsize = sizeof(act->sa_mask);
 
-  asm("movq $13, %%rax\n"
-      "movl %1, %%edi\n"
-      "movq %2, %%rsi\n"
-      "movq %3, %%rdx\n"
-      "movq %4, %%r10\n"
+  asm("mov $13, %%rax\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%rdx\n"
+      "mov %4, %%r10\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :   "rm" (sig), "rm" (act), "rm" (oact), "rm" (sigsetsize));
 
@@ -247,14 +247,14 @@ int sys_prctl(
 {
   int ret = 0;
 
-  asm("movq $157, %%rax\n"
-      "movq %1, %%rdi\n"
-      "movq %2, %%rsi\n"
-      "movq %3, %%rdx\n"
-      "movq %4, %%r10\n"
-      "movq %5, %%r8\n"
+  asm("mov $157, %%rax\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%rdx\n"
+      "mov %4, %%r10\n"
+      "mov %5, %%r8\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :   "rm" (option), "rm" (arg2), "rm" (arg3), "rm" (arg4), "rm" (arg5));
 
@@ -265,11 +265,11 @@ int sys_stat(const char *pathname, struct stat *statbuf)
 {
   int ret = 0;
 
-  asm("movq $4, %%rax\n"
-      "movq %1, %%rdi\n"
-      "movq %2, %%rsi\n"
+  asm("mov $4, %%rax\n"
+      "mov %1, %%rdi\n"
+      "mov %2, %%rsi\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :   "rm" (pathname), "rm" (statbuf));
 
@@ -280,11 +280,11 @@ int sys_setrlimit(int resource, struct rlimit *rlim)
 {
   int ret = 0;
 
-  asm("movq $160, %%rax\n"
-      "movq %1, %%rdi\n"
-      "movq %2, %%rsi\n"
+  asm("mov $160, %%rax\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%rsi\n"
       "syscall\n"
-      "movl %%eax, %0\n"
+      "mov %%eax, %0\n"
   :   "+rm" (ret)
   :   "rm" (resource), "rm" (rlim));
 

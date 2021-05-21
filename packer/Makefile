@@ -7,7 +7,7 @@ BIN_NAME = kiteshield
 
 .PHONY: all debug output_dirs clean
 
-debug: CFLAGS += -g -DDEBUG_OUTPUT
+debug: CFLAGS += -g -DDEBUG_OUTPUT -DNO_ANTIDEBUG
 
 all: output_dirs $(OBJS)
 	$(CC) $(OBJS) -o $(BIN_NAME) $(LDFLAGS)

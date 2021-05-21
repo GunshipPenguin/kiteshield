@@ -29,6 +29,10 @@ void obf_deobf_outer_key(
 {
   __builtin_memcpy(new_key, old_key, sizeof(*old_key));
 
+#ifdef NO_ANTIDEBUG
+  return;
+#endif
+
   /* Skip the struct rc4_key of course, we just want the code */
   unsigned int loader_index = sizeof(struct rc4_key);
   unsigned int key_index = 0;
@@ -53,6 +57,11 @@ void obf_deobf_outer_key(
  */
 void obf_deobf_rt_info(
     struct runtime_info *rt_info) {
+
+#ifdef NO_ANTIDEBUG
+  return;
+#endif
+
   size_t size = (sizeof(struct trap_point) * rt_info->ntraps) +
                 (sizeof(struct function) * rt_info->nfuncs);
 

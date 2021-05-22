@@ -23,14 +23,17 @@ STRINGS = {
         'HEX_DIGITS': '0123456789abcdef'
 }
 
+# For some reason, gcc likes to optimize out this entire statement expression
+# when compiling with more than -O0, mark the cleartext array volatile to
+# circumvent
 _DEOBF_MACRO = '''
 #define DEOBF_STR(str)                                                         \\
-  ({ char cleartext[sizeof(str)];                                              \\
+  ({ volatile char cleartext[sizeof(str)];                                     \\
      for (int i = 0; i < sizeof(str); i++) {                                   \\
        cleartext[i] = str[i] ^ ((0x83 + i) % 256);                             \\
      };                                                                        \\
      cleartext[sizeof(cleartext) - 1] = '\\0';                                 \\
-     cleartext; })
+     (char *) cleartext; })
 
 '''
 

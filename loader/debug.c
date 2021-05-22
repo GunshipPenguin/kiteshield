@@ -84,7 +84,10 @@ void minimal_printf(int fd, const char *format, ...)
         DIE_FMT("Invalid length specifier in printf format string: %s", format);
       }
       break;
+    default:
+      DIE_FMT("Invalid format specifier in printf format string: %s", format);
     }
+
 
     fmt_ptr++;
     switch (*(fmt_ptr)) {

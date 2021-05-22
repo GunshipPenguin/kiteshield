@@ -98,6 +98,9 @@ void sys_exit(int status)
   :
   :   "rm" (status)
   :   "rax", "edi");
+
+  /* Required so GCC accepts __attribute__((noreturn)) on this function */
+  while(1) {}
 }
 
 void *sys_mmap(

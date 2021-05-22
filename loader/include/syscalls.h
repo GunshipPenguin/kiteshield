@@ -271,7 +271,7 @@ int sys_close(
     int fd);
 
 void sys_exit(
-    int status);
+    int status) __attribute__((noreturn));
 
 void *sys_mmap(
     void *addr,

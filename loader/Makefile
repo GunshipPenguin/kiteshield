@@ -8,17 +8,17 @@ OBJS = $(addprefix out/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
 
 OBFUSCATED_STRINGS_FILE = include/obfuscated_strings.h
 
-.PHONY: all output_dirs debug clean
+.PHONY: all output-dirs debug clean
 
 debug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT -DNO_ANTIDEBUG
 debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT
 
-all: output_dirs $(OBFUSCATED_STRINGS_FILE) out/loader_header.h
+all: output-dirs $(OBFUSCATED_STRINGS_FILE) out/loader_header.h
 
 debug: all
 debug-antidebug: all
 
-output_dirs:
+output-dirs:
 	mkdir -p out
 
 $(OBFUSCATED_STRINGS_FILE):

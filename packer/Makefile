@@ -7,18 +7,18 @@ SRCS = $(wildcard *.c ../common/*.c)
 OBJS = $(addprefix ./obj/, $(notdir $(SRCS:.c=.o)))
 BIN_NAME = kiteshield
 
-.PHONY: all debug output_dirs clean
+.PHONY: all debug output-dirs clean
 
 debug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT -DNO_ANTIDEBUG
 debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT
 
-all: output_dirs $(OBJS)
+all: output-dirs $(OBJS)
 	$(CC) $(OBJS) -o $(BIN_NAME) $(LDFLAGS)
 
 debug: all
 debug-antidebug: all
 
-output_dirs:
+output-dirs:
 	mkdir -p obj
 
 obj/%.o: %.c

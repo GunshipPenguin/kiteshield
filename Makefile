@@ -2,27 +2,27 @@
 
 all: packer
 
-debug: packer_debug
-debug-antidebug: packer_debug_antidebug
+debug: packer-debug
+debug-antidebug: packer-debug-antidebug
 
 # The packer requires the headerized loader, thus the loader is a dependency of
 # the packer
 packer: loader
 	$(MAKE) -C packer
 
-packer_debug: loader_debug
+packer-debug: loader-debug
 	$(MAKE) debug -C packer
 
-packer_debug_antidebug: loader_debug_antidebug
+packer-debug-antidebug: loader-debug-antidebug
 	$(MAKE) debug-antidebug -C packer
 
 loader:
 	$(MAKE) -C loader
 
-loader_debug:
+loader-debug:
 	$(MAKE) debug -C loader
 
-loader_debug_antidebug:
+loader-debug-antidebug:
 	$(MAKE) debug-antidebug -C loader
 
 clean:

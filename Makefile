@@ -14,7 +14,7 @@ packer_debug: loader_debug
 	$(MAKE) debug -C packer
 
 packer_debug_antidebug: loader_debug_antidebug
-	$(MAKE) debug -C packer
+	$(MAKE) debug-antidebug -C packer
 
 loader:
 	$(MAKE) -C loader

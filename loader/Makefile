@@ -1,5 +1,7 @@
-CFLAGS = -Wall -std=gnu99 -fno-pie -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
+CFLAGS_COMMON = -Wall -Werror -std=gnu99 -fno-pie -nostdlib -nostartfiles -nodefaultlibs -fno-builtin -c -I ..
 LDFLAGS = -no-pie
+
+CFLAGS = $(CFLAGS_COMMON) -O2
 
 SRCS = $(wildcard *.[c,S] ../common/*.c)
 OBJS = $(addprefix out/, $(addsuffix .o, $(basename $(notdir $(SRCS:.c=.o)))))
@@ -8,8 +10,8 @@ OBFUSCATED_STRINGS_FILE = include/obfuscated_strings.h
 
 .PHONY: all output_dirs debug clean
 
-debug: CFLAGS += -DDEBUG_OUTPUT -DNO_ANTIDEBUG
-debug-antidebug: CFLAGS += -DDEBUG_OUTPUT
+debug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT -DNO_ANTIDEBUG
+debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT
 
 all: output_dirs $(OBFUSCATED_STRINGS_FILE) out/loader_header.h
 

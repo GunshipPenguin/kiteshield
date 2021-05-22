@@ -1,4 +1,6 @@
-CFLAGS = -Wall -std=gnu99 -I .. -I bddisasm/inc
+CFLAGS_COMMON = -Wall -Werror -std=gnu99 -I .. -I bddisasm/inc
+CFLAGS = $(CFLAGS_COMMON) -O2
+
 LDFLAGS = -Lbddisasm/bin/x64/Release -l:libbddisasm.a
 
 SRCS = $(wildcard *.c ../common/*.c)
@@ -7,8 +9,8 @@ BIN_NAME = kiteshield
 
 .PHONY: all debug output_dirs clean
 
-debug: CFLAGS += -g -DDEBUG_OUTPUT -DNO_ANTIDEBUG
-debug-antidebug: CFLAGS += -g -DDEBUG_OUTPUT
+debug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT -DNO_ANTIDEBUG
+debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT
 
 all: output_dirs $(OBJS)
 	$(CC) $(OBJS) -o $(BIN_NAME) $(LDFLAGS)

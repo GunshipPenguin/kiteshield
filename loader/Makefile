@@ -9,7 +9,7 @@ OBJS_NO_RT = $(addprefix out/no_rt/, $(addsuffix .o, $(basename $(notdir $(SRCS:
 
 OBFUSCATED_STRINGS_HEADER = include/obfuscated_strings.h
 
-.PHONY: all output-dirs debug clean
+.PHONY: all output-dirs debug debug-antidebug clean
 
 debug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT -DNO_ANTIDEBUG
 debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT

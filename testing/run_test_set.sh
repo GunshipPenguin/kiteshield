@@ -4,16 +4,15 @@ source output_wrappers.sh
 
 RUN_TEST () {
   TEST_NAME=$1
-  EXPECTED_STATUS=$2
+  BINARY=$2
+  EXPECTED_STATUS=$3
+  EXPECTED_OUTPUT=$4
 
   printf "\t%-50s" "Running test $TEST_NAME"
-
-  TEST_BINARY="${TEST_NAME}.ks"
-  EXPECTED_OUTPUT=$(cat ./tests/expected_outputs/$TEST_NAME)
-  ACTUAL_OUTPUT=$(./out/$TEST_BINARY)
+  ACTUAL_OUTPUT=$(./out/$BINARY)
   ACTUAL_STATUS=$?
 
-  if [ $ACTUAL_STATUS -ne $EXPECTED_STATUS ]
+  if [[ $ACTUAL_STATUS -ne $EXPECTED_STATUS ]]
   then
     echo_red "$X_MARK failed"
 
@@ -36,16 +35,27 @@ RUN_TEST () {
     echo_green "$CHECK_MARK passed"
   fi
 
+
+}
+
+RUN_RT_AND_NORT_TESTS () {
+  BIN_NAME=$1
+  EXPECTED_STATUS=$2
+  EXPECTED_OUTPUT=$(cat ./tests/expected_outputs/$BIN_NAME)
+
+  RUN_TEST "(layer 1) ${BIN_NAME}" "${BIN_NAME}.ks.nort" $EXPECTED_STATUS "$EXPECTED_OUTPUT"
+  RUN_TEST "(layer 1/2) ${BIN_NAME}" "${BIN_NAME}.ks" $EXPECTED_STATUS "$EXPECTED_OUTPUT"
+
   return 0;
 }
 
-RUN_TEST helloworld 0
-RUN_TEST nonzero_exit 7
-RUN_TEST multicall 0
-RUN_TEST recursion 0
-RUN_TEST file_read 0
-RUN_TEST longjmp 0
-RUN_TEST mutual_recursion 0
-RUN_TEST prime_sieve 0
-RUN_TEST static_data 0
-RUN_TEST signals 0
+RUN_RT_AND_NORT_TESTS helloworld 0
+RUN_RT_AND_NORT_TESTS nonzero_exit 7
+RUN_RT_AND_NORT_TESTS multicall 0
+RUN_RT_AND_NORT_TESTS recursion 0
+RUN_RT_AND_NORT_TESTS file_read 0
+RUN_RT_AND_NORT_TESTS longjmp 0
+RUN_RT_AND_NORT_TESTS mutual_recursion 0
+RUN_RT_AND_NORT_TESTS prime_sieve 0
+RUN_RT_AND_NORT_TESTS static_data 0
+RUN_RT_AND_NORT_TESTS signals 0

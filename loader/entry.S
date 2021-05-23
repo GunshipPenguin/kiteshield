@@ -14,11 +14,13 @@ _start:
   # Return value of load is the address of ld.so to jump to, store it
   push %rax
 
-  # Start the runtime in a new thread
+#ifdef USE_RUNTIME
+  # Fork, starting the runtime in the parent process and returning in the child
   call do_fork
 
   # We've now forked. The runtime is running in our parent and will not return.
   # here. Only the child will execute the code below.
+#endif
 
   # The x86-64 SysV ABI specifies that %rdx contains the address of a function
   # to be registered by libc with atexit upon entry (or 0 to indicate no

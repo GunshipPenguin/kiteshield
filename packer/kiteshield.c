@@ -17,7 +17,8 @@
 #include "common/include/defs.h"
 #include "packer/include/elfutils.h"
 
-#include "loader/out/generated_loader.h"
+#include "loader/out/generated_loader_rt.h"
+#include "loader/out/generated_loader_no_rt.h"
 
 /* Convenience macro for error checking libc calls */
 #define CK_NEQ_PERROR(stmt, err)                                              \
@@ -505,27 +506,30 @@ static int apply_outer_encryption(
   return 0;
 }
 
-static void *inject_rt_info(struct runtime_info *rt_info, size_t *new_size)
+static void *inject_rt_info(
+    void *loader,
+    struct runtime_info *rt_info,
+    size_t old_size,
+    size_t *new_size)
 {
   size_t rt_info_size = sizeof(struct runtime_info) +
                         sizeof(struct trap_point) * rt_info->ntraps +
                         sizeof(struct function) * rt_info->nfuncs;
-  void *loader_rt_info = malloc(sizeof(GENERATED_LOADER) + rt_info_size);
+  void *loader_rt_info = malloc(old_size + rt_info_size);
   obf_deobf_rt_info(rt_info);
-  memcpy(loader_rt_info, GENERATED_LOADER, sizeof(GENERATED_LOADER));
-  info(
-      "injected trap point info into loader (old size: %u new size: %u)",
-      sizeof(GENERATED_LOADER), *new_size);
+  memcpy(loader_rt_info, loader, old_size);
+  *new_size = old_size + rt_info_size;
+
+  info("injected runtime info into loader (old size: %u new size: %u)",
+      old_size, *new_size);
 
 
   /* subtract sizeof(struct runtime_info) here to ensure we overwrite the
    * non flexible-array portion of the struct that the linker actually puts in
    * the code. */
-  memcpy(loader_rt_info +
-         sizeof(GENERATED_LOADER) - sizeof(struct runtime_info),
+  memcpy(loader_rt_info + old_size - sizeof(struct runtime_info),
          rt_info, rt_info_size);
 
-  *new_size = sizeof(GENERATED_LOADER) + rt_info_size;
   return loader_rt_info;
 }
 
@@ -593,14 +597,14 @@ static void banner()
 int main(int argc, char *argv[])
 {
   char *input_path, *output_path;
-  int use_inner_encryption = 1;
+  int layer_one_only = 0;
   int c;
   int ret;
 
   while ((c = getopt (argc, argv, "nv")) != -1) {
     switch (c) {
     case 'n':
-      use_inner_encryption = 0;
+      layer_one_only = 1;
       break;
     case 'v':
       log_verbose = 1;
@@ -631,10 +635,13 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  /* Apply inner encryption if requested */
-  size_t loader_rt_info_size = sizeof(GENERATED_LOADER);
-  void *loader_rt_info = GENERATED_LOADER;
-  if (use_inner_encryption) {
+  /* Select loader to use based on the presence of the -n flag. Use the
+   * no-runtime version if we're only applying layer 1 or the runtime version
+   * if we're applying layer 1 and 2 encryption.
+   */
+  void *loader;
+  size_t loader_size;
+  if (!layer_one_only) {
     struct runtime_info *rt_info = NULL;
     ret = apply_inner_encryption(&elf, &rt_info);
     if (ret == -1) {
@@ -642,10 +649,13 @@ int main(int argc, char *argv[])
       return -1;
     }
 
-    /* Inject trap point info into loader */
-    loader_rt_info = inject_rt_info(rt_info, &loader_rt_info_size);
+    loader = inject_rt_info(GENERATED_LOADER_RT, rt_info,
+        sizeof(GENERATED_LOADER_RT), &loader_size);
   } else {
-    info("not applying inner encryption due to -n flag");
+    info("not applying inner encryption and omitting runtime (-n)");
+
+    loader = GENERATED_LOADER_NO_RT;
+    loader_size = sizeof(GENERATED_LOADER_NO_RT);
   }
 
   /* Fully strip binary */
@@ -655,7 +665,7 @@ int main(int argc, char *argv[])
   }
 
   /* Apply outer encryption */
-  ret = apply_outer_encryption(&elf, loader_rt_info, loader_rt_info_size);
+  ret = apply_outer_encryption(&elf, loader, loader_size);
   if (ret == -1) {
     err("could not apply outer encryption");
     return -1;
@@ -664,8 +674,7 @@ int main(int argc, char *argv[])
   /* Write output ELF */
   FILE *output_file;
   CK_NEQ_PERROR(output_file = fopen(output_path, "w"), NULL);
-  ret = produce_output_elf(output_file, &elf, loader_rt_info,
-                           loader_rt_info_size);
+  ret = produce_output_elf(output_file, &elf, loader, loader_size);
   if (ret == -1) {
     err("could not produce output ELF");
     return -1;

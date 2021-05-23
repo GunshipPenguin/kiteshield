@@ -49,9 +49,20 @@ RUN_CONTAINER_TESTS () {
   do
     PACKER_OUTPUT=$(mktemp)
     packer/kiteshield -v $UNPACKED_BIN ${UNPACKED_BIN}.ks > "$PACKER_OUTPUT"
+
     if [ $? -ne 0 ]
     then
-      echo -e "\tFailure packing test binary $UNPACKED_BIN for $TEST_ID"
+      echo -e "\tFailure packing test binary (layer 1 & 2) $UNPACKED_BIN for $TEST_ID"
+      echo -e "\t*******PACKER OUTPUT*******"
+      cat $PACKER_OUTPUT
+      echo -e "\t*******END PACKER OUTPUT*******"
+      exit 1
+    fi
+
+    packer/kiteshield -v -n $UNPACKED_BIN ${UNPACKED_BIN}.ks.nort > "$PACKER_OUTPUT"
+    if [ $? -ne 0 ]
+    then
+      echo -e "\tFailure packing test binary (layer 1) $UNPACKED_BIN for $TEST_ID"
       echo -e "\t*******PACKER OUTPUT*******"
       cat $PACKER_OUTPUT
       echo -e "\t*******END PACKER OUTPUT*******"

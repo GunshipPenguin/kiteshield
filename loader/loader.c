@@ -366,7 +366,7 @@ void *load(void *entry_stacktop)
    * specified in the binary itself.
    */
   void *initial_entry = interp_entry == NULL ? program_entry : interp_entry;
-  DEBUG_FMT("preparing to fork and pass control in child to %p", initial_entry);
+  DEBUG_FMT("control will be passed to packed app at %p", initial_entry);
   return initial_entry;
 }
 

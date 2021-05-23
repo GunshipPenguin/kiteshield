@@ -1,3 +1,5 @@
+#ifdef USE_RUNTIME
+
 #include "common/include/defs.h"
 #include "common/include/obfuscation.h"
 #include "common/include/rc4.h"
@@ -334,3 +336,4 @@ void do_fork()
   DEBUG("child: handing control to packed binary");
 }
 
+#endif /* USE_RUNTIME */

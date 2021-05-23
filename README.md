@@ -67,7 +67,8 @@ the `-n` flag:
 ./packer/kiteshield -n program packed.ks
 ```
 
-This will produce an output binary packed with only layer 1 encryption.
+This will produce an output binary packed with only layer 1 encryption and the
+runtime engine omitted.
 
 ## <a name="codebase-layout"></a> Codebase Layout
 
@@ -220,9 +221,9 @@ $ ./packed.ks
 [kiteshield] replaced auxv entry 7 with value 47244640256 (0xb00000000)
 [kiteshield] replaced auxv entry 5 with value 11 (0xb)
 [kiteshield] finished mapping binary into memory
+[kiteshield] control will be passed to packed app at b00001090
 
 # Mapping done, forking, starting runtime in parent, and handing control to ld.so in child
-[kiteshield] preparing to fork and pass control in child to b00001090
 [kiteshield] starting ptrace runtime
 [kiteshield] number of trap points: 5
 [kiteshield] number of encrypted functions: 3

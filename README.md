@@ -256,7 +256,17 @@ Hello World!
 Kiteshield has an extensive set of integration tests to verify correctness
 across several different platforms. See `testing/README.md` for details.
 
+## Limitations
+
+- Kiteshield's runtime currently does not support multithreaded programs.
+  Programs packed without the `-n` flag (which omits the runtime) must stick to
+  a single thread of execution ("threads of execution" being new
+  processes/threads created with `fork`/`vfork`/`clone`).
+- Kiteshield was written with obfuscation in mind, not speed. Trapping into the
+  Kiteshield runtime on every function entrance and exit is very expensive.
+  Programs packed with layer 2 encryption should expect a serious performance
+  hit.
+
 ## License
 
-[MIT](https://github.com/GunshipPenguin/kiteshield/blob/master/LICENSE) © Rhys Rustad-Elliott
-
+[MIT](https://github.com/GunshipPenguin/kiteshield/blob/master/LICENSE) &#x00a9; Rhys Rustad-Elliott

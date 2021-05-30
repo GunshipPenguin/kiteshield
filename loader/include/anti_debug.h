@@ -36,16 +36,11 @@ static inline int __attribute__((always_inline)) antidebug_proc_check_traced()
   /* Use /proc/<pid>/status instead of /proc/self/status to make this just a
    * bit more frusturating to circumvent as <pid> will change with each exec.
    *
-   * PROC_DIR = "/proc/"
-   * SLASH_STATUS = "/status"
+   * PROC_STATUS_FMT = "/proc/%s/status"
    */
   char proc_path[128];
-  strncpy(proc_path, DEOBF_STR(PROC_PATH), sizeof(proc_path));
-  char pid_buf[32];
-  pid_t pid = sys_getpid();
-  itoa((unsigned long) pid, 0, pid_buf, sizeof(pid_t), 10);
-  strncat(proc_path, pid_buf, sizeof(pid_buf));
-  strncat(proc_path, DEOBF_STR(SLASH_STATUS), sizeof(proc_path) - sizeof(pid_buf));
+  ks_snprintf(proc_path, sizeof(proc_path), DEOBF_STR(PROC_STATUS_FMT),
+              sys_getpid());
 
   /* The check this function performs could be bypassed by running the process
    * in a mount namespace with /proc being something controlable from userspace

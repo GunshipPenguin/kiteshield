@@ -21,6 +21,10 @@ asm ("restorer:\n"
 
 void antidebug_signal_init()
 {
+#ifdef NO_ANTIDEBUG
+  return;
+#endif
+
   struct kernel_sigaction sa;
   sa.sa_mask = ~0UL;
   sa.sa_handler = sigtrap_handler;

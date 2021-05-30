@@ -178,24 +178,24 @@ long sys_ptrace(
   return ret;
 }
 
-pid_t sys_wait4(int *wstatus)
+pid_t sys_wait4(pid_t pid, int *wstatus, int options)
 {
   pid_t ret = 0;
 
-  /* We pass -1 for pid and NULL for options/rusage to simpify the function
-   * signature (we don't currently have a need for these arguments)
+  /* We pass NULL for rusage to simpify the function signature (no need for
+   * that parameter currently)
    */
   asm volatile (
       "mov $61, %%rax\n"
-      "mov $-1, %%rdi\n"
-      "mov %1, %%rsi\n"
-      "mov $0, %%rdx\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%rsi\n"
+      "mov %3, %%edx\n"
       "mov $0, %%r10\n"
       "syscall\n"
       "mov %%eax, %0\n"
   :   "+rm" (ret)
-  :   "rm" (wstatus)
-  :   "rax", "rdi", "rsi", "rdx", "r10");
+  :   "rm" (pid), "rm" ((uint64_t) wstatus), "rm" (options)
+  :   "rax", "edi", "esi", "rdx", "r10");
 
   return ret;
 }

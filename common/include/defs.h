@@ -48,17 +48,12 @@ struct rc4_key {
  * runtime knows about.
  */
 struct function {
+  uint32_t id;
   uint64_t start_addr;
   uint32_t len;
 
   /* Key that this function's code is encrypted with */
   struct rc4_key key;
-
-  /* 1 if this function is currently encrypted. This bit is set/unset as needed
-   * in the runtime code and is required as the function call graph isn't
-   * necessarily always a DAG due to inter-function jumps.
-   */
-  unsigned int encrypted : 1;
 
 /* For logging purposes in debug mode */
 #ifdef DEBUG_OUTPUT

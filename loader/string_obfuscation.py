@@ -10,9 +10,11 @@ import sys
 
 STRINGS = {
         # loader/include/anti_debug.h
-        'PROC_PATH' : '/proc/',
-        'SLASH_STATUS' : '/status',
+        'PROC_STATUS_FMT' : '/proc/%d/status',
         'TRACERPID_PROC_FIELD': 'TracerPid:',
+
+        # loader/runtime.c
+        'PROC_STAT_FMT' : '/proc/%d/status',
 
         # loader/anti_debug.c
         'LD_PRELOAD' : 'LD_PRELOAD',

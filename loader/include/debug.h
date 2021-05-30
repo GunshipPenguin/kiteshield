@@ -44,7 +44,8 @@
 #ifdef DEBUG_OUTPUT
 #define DIE(msg)                                                              \
   do {                                                                        \
-    ks_printf(2, KITESHIELD_PREFIX msg "\n");                            \
+    ks_printf(2, KITESHIELD_PREFIX "%s:%d " msg "\n",                    \
+        __FILE__, __LINE__);                                                  \
     sys_exit(1);                                                              \
   } while (0)
 #else
@@ -54,7 +55,8 @@
 #ifdef DEBUG_OUTPUT
 #define DIE_FMT(msg, ...)                                                     \
   do {                                                                        \
-    ks_printf(2, KITESHIELD_PREFIX msg "\n", __VA_ARGS__);               \
+    ks_printf(2, KITESHIELD_PREFIX "%s:%d " msg "\n",                     \
+        __FILE__, __LINE__, __VA_ARGS__);                                     \
     sys_exit(1);                                                              \
   } while (0)
 #else
@@ -68,7 +70,8 @@
 #define DIE_IF(cond, msg)                                                     \
   do {                                                                        \
     if (cond) {                                                               \
-      ks_printf(2, KITESHIELD_PREFIX msg "\n");                          \
+      ks_printf(2, KITESHIELD_PREFIX "%s:%d " msg "\n",                  \
+          __FILE__, __LINE__);                                                \
       sys_exit(1);                                                            \
     }                                                                         \
   } while (0)
@@ -85,7 +88,8 @@
 #define DIE_IF_FMT(cond, msg, ...)                                            \
   do {                                                                        \
     if (cond) {                                                               \
-      ks_printf(2, KITESHIELD_PREFIX msg "\n", __VA_ARGS__);             \
+      ks_printf(2, KITESHIELD_PREFIX "%s:%d " msg "\n",                  \
+          __FILE__, __LINE__, __VA_ARGS__);                                   \
       sys_exit(1);                                                            \
     }                                                                         \
   } while (0)

@@ -11,8 +11,8 @@ OBFUSCATED_STRINGS_HEADER = include/obfuscated_strings.h
 
 .PHONY: all output-dirs debug debug-antidebug clean
 
-debug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT -DNO_ANTIDEBUG
-debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -DDEBUG_OUTPUT
+debug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT -DNO_ANTIDEBUG
+debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT
 
 all: output-dirs $(OBFUSCATED_STRINGS_HEADER) out/loader_header_rt.h out/loader_header_no_rt.h
 debug: all

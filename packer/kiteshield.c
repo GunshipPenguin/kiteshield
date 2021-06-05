@@ -380,23 +380,33 @@ static int apply_inner_encryption(
      *
      * Detect and skip them here as to not double-encrypt.
      */
+    uint64_t base = get_base_addr(elf->ehdr);
     struct function *alias = NULL;
     for (size_t i = 0; i < (*rt_info)->nfuncs; i++) {
       struct function *fcn = &fcn_arr[i];
 
       /* If there's any overlap at all between something we've already
        * encrypted, abort */
-      if ((fcn->start_addr < (sym->st_value + sym->st_size)) &&
-          ((fcn->start_addr + fcn->len) > sym->st_value)) {
+      if ((fcn->start_addr < (base + sym->st_value + sym->st_size)) &&
+          ((fcn->start_addr + fcn->len) > base + sym->st_value)) {
         alias = fcn;
         break;
       }
     }
 
     if (alias) {
+      /* We have alias->name if DEBUG_OUTPUT is set, so output it for a bit
+       * more useful info */
+#ifndef DEBUG_OUTPUT
         verbose(
-            "not encrypting function %s as it aliases or overlaps one already encrypted at %p of len %u",
+            "not encrypting function %s at %p as it aliases or overlaps one already encrypted at %p of len %u",
             elf_get_sym_name(elf, sym), alias->start_addr, alias->len);
+#else
+        verbose(
+            "not encrypting function %s at %p as it aliases or overlaps %s at %p of len %u",
+            elf_get_sym_name(elf, sym), base + sym->st_value, alias->name, alias->start_addr, alias->len);
+#endif
+
         continue;
     }
 

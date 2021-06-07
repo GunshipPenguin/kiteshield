@@ -8,7 +8,7 @@ RUN_TEST () {
   EXPECTED_STATUS=$3
   EXPECTED_OUTPUT=$4
 
-  printf "\t%-50s" "Running test $TEST_NAME"
+  printf "\t%-60s" "Running test $TEST_NAME"
   ACTUAL_OUTPUT=$(./out/$BINARY)
   ACTUAL_STATUS=$?
 
@@ -49,6 +49,7 @@ RUN_RT_AND_NORT_TESTS () {
   return 0;
 }
 
+# Single-threaded tests
 RUN_RT_AND_NORT_TESTS helloworld 0
 RUN_RT_AND_NORT_TESTS nonzero_exit 7
 RUN_RT_AND_NORT_TESTS multicall 0
@@ -59,3 +60,8 @@ RUN_RT_AND_NORT_TESTS mutual_recursion 0
 RUN_RT_AND_NORT_TESTS prime_sieve 0
 RUN_RT_AND_NORT_TESTS static_data 0
 RUN_RT_AND_NORT_TESTS signals 0
+
+# Muti-threaded tests
+RUN_RT_AND_NORT_TESTS pthread_simple 0
+RUN_RT_AND_NORT_TESTS pthread_many_threads 0
+RUN_RT_AND_NORT_TESTS pthread_shared_stacktraces 0

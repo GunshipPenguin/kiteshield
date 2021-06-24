@@ -245,9 +245,11 @@ static int is_instrumentable_jmp(
   /* Jump with (known at pack-time) relative offset, check if it jumps out of
    * its function, if so, it requires instrumentation. */
   if (ix->Instruction == ND_INS_JMPNR || ix->Instruction == ND_INS_Jcc) {
-    int64_t displacement = (int64_t) ix->Operands[0].Info.RelativeOffset.Rel;
+    /* Rel is relative to next instruction so we must add the length */
+    int64_t displacement =
+      (int64_t) ix->Operands[0].Info.RelativeOffset.Rel + ix->Length;
     uint64_t jmp_dest = ix_addr + displacement;
-    if (jmp_dest < fcn_start || jmp_dest > fcn_start + fcn_size)
+    if (jmp_dest < fcn_start || jmp_dest >= fcn_start + fcn_size)
       return 1;
   }
 

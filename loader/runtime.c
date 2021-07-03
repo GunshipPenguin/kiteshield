@@ -39,6 +39,7 @@ struct address_space {
 struct thread {
   pid_t pid;
   int curr_fcn;
+  int has_wait_prio;
   struct address_space *as;
   struct thread *next;
 };
@@ -489,6 +490,7 @@ int maybe_handle_new_thread(
 
   new_thread->as->refcnt++;
   new_thread->curr_fcn = orig_thread->curr_fcn;
+  new_thread->has_wait_prio = 0;
   new_thread->as->fcn_ref_arr[orig_thread->curr_fcn]++;
   add_thread(tlist, new_thread);
 
@@ -508,6 +510,70 @@ retry_child_wait:
     goto retry_child_wait;
 
   return 1;
+}
+
+/* Fairly waits on all threads in the packed program.
+ *
+ * This is a wrapper for sys_wait4 used in the main runtime loop to wait
+ * on the next thread to service for function encryption or decryption. It gets
+ * around a subtle ptrace timing issue.
+ *
+ * The wait4 syscall is not fair in the sense that a thread rapidly changing
+ * state can monopolise it and cause other threads to not be waited on.
+ * Internally, when a process ptraces a new thread, it's task_struct is added
+ * to a linked list of traced threads in tracer_task_struct->ptraced. New
+ * threads are pushed onto the head of this linked list. Whenever the tracer
+ * does a wait4, this list is iterated head to tail, with the first thread
+ * exhibiting a changed state being the thread that is waited on.
+ *
+ * This has the consequence that, if the threads at the head of the list very
+ * rapidly change state, threads further down in the list may need to wait a
+ * very long time, or even forever to get serviced if there are enough threads
+ * in front of them changing state rapidly enough. In the case of Kiteshield,
+ * this will cause the threads further down in the list to wait a long time or
+ * potentially forever for function encryption/decryption. Both of these
+ * behaviors (program slowness and program lockup) have been observed when this
+ * helper was not in use.
+ *
+ * To get around this, we wait on threads in a round-robin fashion. The list of
+ * threads in the packed program is iterated and each one is waited on with
+ * WNOHANG. If the thread has not changed state, we continue on to the next,
+ * wrapping around to the head of the list and repeating until we find a thread
+ * that has changed state. The next thread to be waited on is preserved via the
+ * has_wait_prio flag to preserve strict round-robin ordering between calls.
+ */
+pid_t fair_wait_threads(struct thread_list *tlist, int *wstatus)
+{
+  struct thread *curr = tlist->head;
+  while (curr) {
+    if (curr->has_wait_prio)
+      break;
+    curr = curr->next;
+  }
+  curr->has_wait_prio = 0;
+
+  pid_t pid;
+  while (1) {
+    pid = sys_wait4(curr->pid, wstatus, __WALL | WNOHANG);
+    DIE_IF_FMT(pid < 0,
+        "wait4 syscall failed with error %d", pid);
+
+    /* Return value of 0 indicates thread has not changed state */
+    if (pid != 0)
+      break;
+
+    if (curr->next)
+      curr = curr->next;
+    else
+      curr = tlist->head;
+  }
+
+  if (curr->next)
+    curr->next->has_wait_prio = 1;
+  else
+    tlist->head->has_wait_prio = 1;
+
+  return pid;
 }
 
 void setup_initial_thread(pid_t pid, struct thread_list *tlist)
@@ -531,6 +597,7 @@ void setup_initial_thread(pid_t pid, struct thread_list *tlist)
   }
 
   struct thread *thread = malloc(sizeof(struct thread));
+  thread->has_wait_prio = 1;
   thread->pid = pid;
   thread->as = new_address_space(NULL);
   thread->next = NULL;
@@ -580,8 +647,7 @@ void runtime_start(pid_t child_pid)
   /* Main runtime loop */
   while (1) {
     int wstatus;
-    pid_t pid = sys_wait4(-1, &wstatus, __WALL);
-    DIE_IF_FMT(pid < 0, "wait4 syscall failed with error %d", pid);
+    pid_t pid = fair_wait_threads(&tlist, &wstatus);
 
     struct thread *thread = find_thread(&tlist, pid);
     /* TODO: investigate: might die on newly created threads reporting SIGSTOP

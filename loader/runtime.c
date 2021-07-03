@@ -180,21 +180,6 @@ static char get_process_state(
   return buf[i];
 }
 
-static void resume_threads_in_same_as(
-    struct thread *thread,
-    struct thread_list *tlist)
-{
-  struct thread *curr = tlist->head;
-  while (curr) {
-    if (curr != thread && curr->as == thread->as) {
-      long ret = sys_ptrace(PTRACE_CONT, curr->pid, NULL, NULL);
-      DIE_IF_FMT(ret < 0, "PTRACE_CONT for %d failed with %d", curr->pid, ret);
-    }
-
-    curr = curr->next;
-  }
-}
-
 static void stop_threads_in_same_as(
     struct thread *thread,
     struct thread_list *tlist)
@@ -388,8 +373,6 @@ static void handle_trap(
     handle_fcn_entry(thread, tp);
   else
     handle_fcn_exit(thread, tlist, tp);
-
-  (void) resume_threads_in_same_as;
 
   DIE_IF(antidebug_signal_check(), TRACED_MSG);
 

@@ -303,16 +303,28 @@ static void handle_fcn_exit(
       set_byte_at_addr(thread->pid, prev_fcn->start_addr, INT3);
     }
 
-    /* If the function we're entering is encrypted, decrypt it. */
-    if (FCN_REFCNT(thread, new_fcn) == 0) {
-      DEBUG_FMT("pid %d: function %s being entered is encrypted, decrypting with key %s",
-                thread->pid, new_fcn->name, STRINGIFY_KEY(&new_fcn->key));
+    /* If this is a jump to the start instruction of a function, do not execute
+     * any of the code under this conditional (decryption if requried and
+     * refcount bump will be handled by handle_fcn_entry).
+     *
+     * If this is a jump to the middle of a function, we're not going to hit
+     * the entry trap point for the function, so that work must be done here.
+     *
+     * This avoids a double encryption/decryption.
+     */
+    if (tp->type == TP_JMP && new_fcn->start_addr != regs.ip) {
+      DEBUG_FMT("pid %d: function %s is being entered via jmp at non start address %p",
+                thread->pid, new_fcn->name, regs.ip);
 
-      rc4_xor_fcn(thread->pid, new_fcn);
-      set_byte_at_addr(thread->pid, new_fcn->start_addr, INT3);
+      if (FCN_REFCNT(thread, new_fcn) == 0) {
+        DEBUG_FMT("pid %d: function %s being entered is encrypted, decrypting with key %s",
+                  thread->pid, new_fcn->name, STRINGIFY_KEY(&new_fcn->key));
+
+        rc4_xor_fcn(thread->pid, new_fcn);
+        set_byte_at_addr(thread->pid, new_fcn->start_addr, INT3);
+        FCN_INC_REF(thread, new_fcn);
+      }
     }
-
-    FCN_INC_REF(thread, new_fcn);
   } else if (!new_fcn) {
     /* We've left the function we were previously in for a new one that we
      * don't have a record of. */

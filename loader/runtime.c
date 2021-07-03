@@ -93,7 +93,7 @@ static void single_step(pid_t pid)
 retry:
   res = sys_ptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
   DIE_IF_FMT(res < 0, "PTRACE_SINGLESTEP failed with error %d", res);
-  sys_wait4(pid, &wstatus, 0);
+  sys_wait4(pid, &wstatus, __WALL);
 
   DIE_IF_FMT(pid < 0, "wait4 syscall failed with error %d", pid);
   DIE_IF_FMT(

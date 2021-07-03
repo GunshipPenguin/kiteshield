@@ -14,7 +14,7 @@ STRINGS = {
         'TRACERPID_PROC_FIELD': 'TracerPid:',
 
         # loader/runtime.c
-        'PROC_STAT_FMT' : '/proc/%d/status',
+        'PROC_STAT_FMT' : '/proc/%d/stat',
 
         # loader/anti_debug.c
         'LD_PRELOAD' : 'LD_PRELOAD',

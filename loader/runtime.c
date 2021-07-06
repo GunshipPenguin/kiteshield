@@ -417,7 +417,6 @@ void destroy_thread(
   while ((*p) != thread)
     p = &(*p)->next;
 
-  thread->as->refcnt--;
   if (--thread->as->refcnt == 0) {
     free(thread->as->fcn_ref_arr);
     free(thread->as);
@@ -608,6 +607,7 @@ void setup_initial_thread(pid_t tid, struct thread_list *tlist)
   thread->tgid = tid; /* Created via fork so it's the thread group leader */
   thread->tid = tid;
   thread->as = new_address_space(NULL);
+  thread->as->refcnt = 1;
   thread->next = NULL;
   add_thread(tlist, thread);
 

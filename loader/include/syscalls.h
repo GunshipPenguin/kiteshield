@@ -161,10 +161,16 @@ struct user_regs_struct {
 # define WIFCONTINUED(status) ((status) == W_CONTINUED)
 #endif
 
-#define __WNOTHREAD 0x20000000
-#define __WALL      0x40000000
-#define __WCLONE    0x80000000
+#define WNOHANG		0x00000001
+#define WUNTRACED	0x00000002
+#define WSTOPPED	WUNTRACED
+#define WEXITED		0x00000004
+#define WCONTINUED	0x00000008
+#define WNOWAIT		0x01000000
 
+#define __WNOTHREAD	0x20000000
+#define __WALL		0x40000000
+#define __WCLONE	0x80000000
 
 /* rt_sigaction syscall constants/defines */
 struct kernel_sigaction {
@@ -332,6 +338,11 @@ pid_t sys_fork();
 
 int sys_kill(
     pid_t pid,
+    int sig);
+
+int sys_tgkill(
+    pid_t tgid,
+    pid_t tid,
     int sig);
 
 pid_t sys_getpid();

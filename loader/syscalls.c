@@ -232,6 +232,24 @@ int sys_kill(pid_t pid, int sig)
   return ret;
 }
 
+int sys_tgkill(pid_t tgid, pid_t tid, int sig)
+{
+  pid_t ret = 0;
+
+  asm volatile (
+      "mov $234, %%rax\n"
+      "mov %1, %%edi\n"
+      "mov %2, %%esi\n"
+      "mov %3, %%edx\n"
+      "syscall\n"
+      "mov %%eax, %0\n"
+  :   "+rm" (ret)
+  :   "rm" (tgid), "rm" (tid), "rm" (sig)
+  :   "rax", "edi", "esi", "edx");
+
+  return ret;
+}
+
 pid_t sys_getpid()
 {
   pid_t ret = 0;

@@ -417,7 +417,8 @@ void destroy_thread(
   while ((*p) != thread)
     p = &(*p)->next;
 
-  if (--thread->as->refcnt == 0) {
+  thread->as->refcnt--;
+  if (thread->as->refcnt == 0) {
     free(thread->as->fcn_ref_arr);
     free(thread->as);
   }

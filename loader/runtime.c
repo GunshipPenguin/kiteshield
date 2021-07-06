@@ -306,10 +306,11 @@ static void handle_fcn_exit(
         DEBUG_FMT("tid %d: function %s being entered is encrypted, decrypting with key %s",
                   thread->tid, new_fcn->name, STRINGIFY_KEY(&new_fcn->key));
 
-        FCN_INC_REF(thread, new_fcn);
         rc4_xor_fcn(thread->tid, new_fcn);
         set_byte_at_addr(thread->tid, new_fcn->start_addr, INT3);
       }
+
+      FCN_INC_REF(thread, new_fcn);
     }
   } else if (!new_fcn) {
     /* We've left the function we were previously in for a new one that we

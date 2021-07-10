@@ -68,5 +68,3 @@ TEST_CASE(malloc_coalesce_with_memset) {
 
   ASSERT_EQUAL(ks_malloc_get_n_blocks(), 1);
 }
-
-TEST_MAIN()

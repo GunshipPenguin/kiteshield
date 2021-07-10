@@ -10,6 +10,7 @@ cmake-build*
 # Build artifacts
 packer/obj/
 loader/out/
+loader/test/out/
 testing/out
 packer/kiteshield
 loader/include/obfuscated_strings.h

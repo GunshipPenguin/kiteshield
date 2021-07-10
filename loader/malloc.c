@@ -14,7 +14,7 @@ struct block {
   struct block *prev;
 };
 
-void init_heap()
+void ks_malloc_init()
 {
   heap_base = sys_mmap(NULL,
       HEAP_SIZE,
@@ -29,34 +29,54 @@ void init_heap()
   first->prev = NULL;
 }
 
-struct block *split_block(size_t size, struct block *victim)
+void ks_malloc_deinit()
 {
+  int ret = sys_munmap(heap_base, HEAP_SIZE);
+  DIE_IF_FMT(ret < 0, "munmap failed with %d", ret);
+}
+
+static struct block *split_block(size_t size, struct block *victim)
+{
+  DIE_IF(victim->size < size, "not enough room for block split");
+
   if (victim->size - size - sizeof(struct block) <= 0) {
     /* Not enough space to fit another block in, just return the victim
      * without splitting */
     return victim;
   }
 
-  struct block *new_block = (struct block *)
-    ((char *) victim) + sizeof(struct block) + size;
-  new_block->size = victim->size - size;
+  struct block *new_block =
+    (struct block *) (((char *) victim) + sizeof(struct block) + size);
+  new_block->size = victim->size - size - sizeof(struct block);
   new_block->in_use = 0;
   new_block->next = victim->next;
   new_block->prev = victim;
 
   victim->size = size;
+
+  if (victim->next)
+    victim->next->prev = new_block;
+
   victim->next = new_block;
 
   return victim;
 }
 
-void *malloc(size_t size)
+int ks_malloc_get_n_blocks()
 {
-  if (!heap_base)
-    init_heap();
+  int n = 0;
+  struct block *curr = heap_base;
+  while (curr != NULL) {
+    n++;
+    curr = curr->next;
+  }
 
-  if (size == 0)
-    DIE("malloc of size 0, likely loader bug");
+  return n;
+}
+
+void *ks_malloc(size_t size)
+{
+  DIE_IF(size == 0, "malloc of size 0, likely loader bug");
 
   struct block *curr = heap_base;
   struct block *target = NULL;
@@ -85,24 +105,28 @@ void *malloc(size_t size)
   return target + 1;
 }
 
-void free(void *ptr)
+void ks_free(void *ptr)
 {
   struct block *block = ((struct block *) ptr) - 1;
   block->in_use = 0;
 
   /* Coalesce back */
-  if (block->prev &&
-      (void *) (((char *) block->prev) + block->prev->size + sizeof(struct block)) == ptr) {
-    block->prev->size += block->size;
+  if (block->prev && !block->prev->in_use) {
+    block->prev->size += block->size + sizeof(struct block);
     block->prev->next = block->next;
+
+    if (block->next)
+      block->next->prev = block->prev;
+
     block = block->prev;
   }
 
   /* Coalesce forward */
-  if (block->next &&
-      (void *) (((char *) block) + block->size + sizeof(struct block)) == (void *) block->next) {
+  if (block->next && !block->next->in_use) {
     block->size += block->next->size + sizeof(struct block);
     block->next = block->next->next;
-    block->next->next->prev = block;
+
+    if (block->next)
+      block->next->prev = block;
   }
 }

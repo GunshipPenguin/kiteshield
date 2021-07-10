@@ -318,6 +318,10 @@ void *sys_mmap(
     int fd,
     off_t offset);
 
+int sys_munmap(
+    void *addr,
+    size_t length);
+
 int sys_mprotect(
     void *addr,
     size_t len,

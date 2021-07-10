@@ -131,6 +131,25 @@ void *sys_mmap(
   return ret;
 }
 
+int sys_munmap(
+    void *addr,
+    size_t length)
+{
+  int ret = 0;
+
+  asm volatile (
+      "mov $11, %%rax\n"
+      "mov %1, %%rdi\n"
+      "mov %2, %%rsi\n"
+      "syscall\n"
+      "mov %%eax, %0"
+  :   "+rm" (ret)
+  :   "rm" (addr), "rm" (length)
+  :   "rax", "rdi", "rsi");
+
+  return ret;
+}
+
 int sys_mprotect(void *addr, size_t len, int prot)
 {
   int ret = 0;

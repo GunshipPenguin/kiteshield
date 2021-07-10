@@ -14,9 +14,13 @@ OBFUSCATED_STRINGS_HEADER = include/obfuscated_strings.h
 debug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT -DNO_ANTIDEBUG
 debug-antidebug: CFLAGS = $(CFLAGS_COMMON) -g -DDEBUG_OUTPUT
 
-all: output-dirs $(OBFUSCATED_STRINGS_HEADER) out/loader_header_rt.h out/loader_header_no_rt.h
+all: output-dirs $(OBFUSCATED_STRINGS_HEADER) out/loader_header_rt.h out/loader_header_no_rt.h tests
 debug: all
 debug-antidebug: all
+
+tests:
+	$(MAKE) -C test clean
+	$(MAKE) -C test
 
 out/loader_header_rt.h: $(OBJS_RT)
 	$(LD) $(LDFLAGS) $(OBJS_RT) -T link.lds -o out/rt/loader-elf

@@ -419,10 +419,10 @@ void destroy_thread(
 
   thread->as->refcnt--;
   if (thread->as->refcnt == 0) {
-    free(thread->as->fcn_ref_arr);
-    free(thread->as);
+    ks_free(thread->as->fcn_ref_arr);
+    ks_free(thread->as);
   }
-  free(thread);
+  ks_free(thread);
 
   *p = thread->next;
   list->size--;
@@ -431,11 +431,11 @@ void destroy_thread(
 struct address_space *new_address_space(
     struct address_space *cow_as)
 {
-    struct address_space *as = malloc(sizeof(struct address_space));
+    struct address_space *as = ks_malloc(sizeof(struct address_space));
     as->refcnt = 0;
 
     size_t ref_arr_size = rt_info.nfuncs * sizeof(*as->fcn_ref_arr);
-    as->fcn_ref_arr = malloc(ref_arr_size);
+    as->fcn_ref_arr = ks_malloc(ref_arr_size);
 
     if (cow_as)
       memcpy(as->fcn_ref_arr, cow_as->fcn_ref_arr, ref_arr_size);
@@ -473,7 +473,7 @@ int maybe_handle_new_thread(
 
   DEBUG_FMT("tid %d: new thread created with tid %d", tid, new_tid);
 
-  struct thread *new_thread = malloc(sizeof(struct thread));
+  struct thread *new_thread = ks_malloc(sizeof(struct thread));
   new_thread->tid = new_tid;
 
   /* Determine if new address space or not */
@@ -603,7 +603,7 @@ void setup_initial_thread(pid_t tid, struct thread_list *tlist)
     if (ret == 0) break;
   }
 
-  struct thread *thread = malloc(sizeof(struct thread));
+  struct thread *thread = ks_malloc(sizeof(struct thread));
   thread->has_wait_prio = 1;
   thread->tgid = tid; /* Created via fork so it's the thread group leader */
   thread->tid = tid;
@@ -636,6 +636,8 @@ void runtime_start(pid_t child_pid)
               tp->addr, tp->value, type, FCN(tp)->name, FCN(tp)->id);
   }
 #endif
+
+  ks_malloc_init();
 
   /* debugger checks are scattered throughout the runtime to interfere with
    * debugger attaches as much as possible.

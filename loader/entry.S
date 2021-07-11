@@ -29,7 +29,7 @@ _start:
   # was probably clobbered by the calls to load/do_fork above, so zero it
   # before we jump to program entry so the libc doesn't register a garbage
   # address as an exit handler.
-  xor %rdx, %rdx
+  xor %edx, %edx
 
   # While we're at it, zero all the other non-privileged registers (besides
   # %rbx, which is holding the program entry point to jump to) that Linux

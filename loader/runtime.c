@@ -15,7 +15,7 @@
 #include "loader/include/anti_debug.h"
 
 #define FCN_ARR_START ((struct function *) (((struct trap_point *) rt_info.data) + rt_info.ntraps))
-#define FCN(tp) ((struct function *) (FCN_ARR_START + tp->fcn_i))
+#define FCN_FROM_TP(tp) ((struct function *) (FCN_ARR_START + tp->fcn_i))
 
 #define FCN_REFCNT(thread, fcn) ((thread)->as->fcn_ref_arr[(fcn)->id])
 
@@ -218,7 +218,7 @@ static void handle_fcn_entry(
     struct trap_point *tp)
 {
   DIE_IF(antidebug_proc_check_traced(), TRACED_MSG);
-  struct function *fcn = FCN(tp);
+  struct function *fcn = FCN_FROM_TP(tp);
 
   if (FCN_REFCNT(thread, fcn) == 0) {
     DEBUG_FMT(
@@ -259,7 +259,7 @@ static void handle_fcn_exit(
   struct user_regs_struct regs;
   long res = sys_ptrace(PTRACE_GETREGS, thread->tid, NULL, &regs);
   DIE_IF_FMT(res < 0, "PTRACE_GETREGS failed with error %d", res);
-  struct function *prev_fcn = FCN(tp);
+  struct function *prev_fcn = FCN_FROM_TP(tp);
   struct function *new_fcn = get_fcn_at_addr(regs.ip);
 
   if (new_fcn != NULL && new_fcn != prev_fcn) {
@@ -624,7 +624,8 @@ void runtime_start(pid_t child_pid)
     const char *type =
       tp->type == TP_JMP ? "jmp" : tp->type == TP_RET ? "ret" : "ent";
     DEBUG_FMT("%p value: %hhx, type: %s, function: %s (#%d)",
-              tp->addr, tp->value, type, FCN(tp)->name, FCN(tp)->id);
+              tp->addr, tp->value, type,
+              FCN_FROM_TP(tp)->name, FCN_FROM_TP(tp)->id);
   }
 #endif
 

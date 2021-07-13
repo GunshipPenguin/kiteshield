@@ -652,8 +652,6 @@ void runtime_start(pid_t child_pid)
     pid_t pid = fair_wait_threads(&tlist, &wstatus);
 
     struct thread *thread = find_thread(&tlist, pid);
-    /* TODO: investigate: might die on newly created threads reporting SIGSTOP
-     * before parent SIGTRAP */
     DIE_IF_FMT(!thread,
         "(runtime bug) tid %d trapped but we don't have a record of it", pid);
 

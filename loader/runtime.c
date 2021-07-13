@@ -31,16 +31,35 @@
 
 struct runtime_info rt_info __attribute__((section(".rt_info")));
 
+/* Function encryption data needs to be maintained per address space and not
+ * per-thread as multiple threads could be executing in the same address space.
+ */
 struct address_space {
   int refcnt;
+
+  /* Array of "reference counts" indexed by function id of functions in this
+   * address space. When a thread enters a function, we bump its refcount and
+   * when a thread leaves, we decrement it. Thus, a function's reference count
+   * indicates the number of threads having it in their stack trace. When this
+   * reaches 0, that indicates we can safely encrypt the function as no thread
+   * will return to it in the future, expecting it to be decrypted.
+   *
+   * 16 bit integers were chosen to save a bit of space since this array can be
+   * large. This still allows 65535 threads, which ought to be enough for
+   * anybody.
+   */
   uint16_t *fcn_ref_arr;
 };
 
+/* Information about an executing thread of execution (ie. something created
+ * via fork/vfork/clone. A linked list of these is maintained on kiteshield's
+ * heap for every thread in existence.
+ */
 struct thread {
   pid_t tgid;
   pid_t tid;
-  int curr_fcn;
-  int has_wait_prio;
+  int curr_fcn; /* Id of current function this thread is in */
+  int has_wait_prio; /* See fair_wait_threads */
   struct address_space *as;
   struct thread *next;
 };

@@ -191,19 +191,10 @@ static void stop_threads_in_same_as(
     if (curr != thread && curr->as == thread->as)
       sys_tgkill(curr->tgid, curr->tid, SIGSTOP);
 
-    /* We need to busy loop here waiting for the SIGSTOP to be delivered to
-     * avoid the following race condition:
-     *
-     * 1) sys_kill invoked above to signal process with SIGSTOP
-     * 2) sys_kill returns, SIGSTOP is pending on signaled process
-     * 3) We return from this function and start decrypting a function
-     * 4) The process with pid <pid> calls the function we're decrypting
-     *    mid-decrypt and tries to execute garbage instructions
-     *
-     * Phrased differently: the problem is that sys_kill(pid, SIGSTOP) will not
-     * immediately stop the process, there is a period of time between the
-     * syscall invocation and when the signal is actually delivered (the signal
-     * is said to be pending during this time).
+    /* We need to busy loop here waiting for the SIGSTOP to be delivered since
+     * sys_tgkill(pid, SIGSTOP) will not immediately stop the process, there is
+     * a period of time between the syscall invocation and when the signal is
+     * actually delivered (the signal is said to be pending during this time).
      *
      * To prevent this we must ensure the process is fully stopped before
      * proceeding. We can't do a sys_wait4 on the process as that may return a

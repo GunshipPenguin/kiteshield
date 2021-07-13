@@ -26,12 +26,11 @@ are rather simple and should be self-documenting.
 
 ## Adding New Tests
 
-To add a new test called `mytest.c`, add your test code under `tests/mytest.c`
+To add a new test called `mytest`, add your test code under `tests/mytest.c`
 and expected output on standard output to a file called
 `tests/expected_output/mytest`. Then add the following line to
 `run_test_set.sh` (assuming 0 is the expected exit code of the test):
 
 ```
-RUN_TEST mytest 0
+RUN_RT_AND_NORT_TESTS mytest 0
 ```
-

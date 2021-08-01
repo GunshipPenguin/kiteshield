@@ -37,9 +37,10 @@ void ks_malloc_deinit()
 
 static struct block *split_block(size_t size, struct block *victim)
 {
-  DIE_IF(victim->size < size, "not enough room for block split");
+  DIE_IF(victim->size < size + sizeof(struct block),
+      "not enough room for block split");
 
-  if (victim->size - size - sizeof(struct block) <= 0) {
+  if (victim->size - size <= sizeof(struct block)) {
     /* Not enough space to fit another block in, just return the victim
      * without splitting */
     return victim;
@@ -91,7 +92,7 @@ void *ks_malloc(size_t size)
       break;
     }
 
-    if (curr->size >= size) {
+    if (curr->size >= size + sizeof(struct block)) {
       target = split_block(size, curr);
       break;
     }

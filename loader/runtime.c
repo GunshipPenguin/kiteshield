@@ -14,10 +14,12 @@
 #include "loader/include/malloc.h"
 #include "loader/include/anti_debug.h"
 
+/* See PTRACE_SETOPTIONS in ptrace manpage */
+#define PTRACE_EVENT_PRESENT(wstatus, event) \
+  ((wstatus) >> 8 == (SIGTRAP | (event) << 8))
+
 #define FCN_ARR_START ((struct function *) (((struct trap_point *) rt_info.data) + rt_info.ntraps))
 #define FCN_FROM_TP(tp) ((struct function *) (FCN_ARR_START + tp->fcn_i))
-
-#define FCN_REFCNT(thread, fcn) ((thread)->as->fcn_ref_arr[(fcn)->id])
 
 #define FCN_INC_REF(thread, fcn) \
   do { \
@@ -27,7 +29,21 @@
 #define FCN_DEC_REF(thread, fcn) \
   do { \
     ((thread)->as->fcn_ref_arr[(fcn)->id]--); \
+  } while(0)
+
+#define FCN_ENTER(thread, fcn) \
+  do { \
+    bt_push(thread, fcn); \
+    FCN_INC_REF(thread, fcn); \
   } while (0)
+
+#define FCN_EXIT(thread, fcn) \
+  do { \
+    bt_pop(thread); \
+    FCN_DEC_REF(thread, fcn); \
+  } while (0)
+
+#define FCN_REFCNT(thread, fcn) ((thread)->as->fcn_ref_arr[(fcn)->id])
 
 struct runtime_info rt_info __attribute__((section(".rt_info")));
 
@@ -51,6 +67,11 @@ struct address_space {
   uint16_t *fcn_ref_arr;
 };
 
+struct backtrace {
+  struct function *fcn;
+  struct backtrace *next;
+};
+
 /* Information about an executing thread of execution (ie. something created
  * via fork/vfork/clone. A linked list of these is maintained on kiteshield's
  * heap for every thread in existence.
@@ -58,8 +79,8 @@ struct address_space {
 struct thread {
   pid_t tgid;
   pid_t tid;
-  int curr_fcn; /* Id of current function this thread is in */
   int has_wait_prio; /* See fair_wait_threads */
+  struct backtrace *bt;
   struct address_space *as;
   struct thread *next;
 };
@@ -201,6 +222,25 @@ static char get_thread_state(
   return buf[i];
 }
 
+void bt_push(struct thread *thread, struct function *fcn)
+{
+  struct backtrace *new_entry = ks_malloc(sizeof(struct backtrace));
+  new_entry->fcn = fcn;
+  new_entry->next = thread->bt;
+  thread->bt = new_entry;
+}
+
+void bt_pop(struct thread *thread)
+{
+  DIE_IF_FMT(!thread->bt,
+      "attempting to pop backtrace item from empty backtrace of tid %d",
+      thread->tid);
+
+  struct backtrace *new_bt = thread->bt->next;
+  ks_free(thread->bt);
+  thread->bt = new_bt;
+}
+
 static void stop_threads_in_same_as(
     struct thread *thread,
     struct thread_list *tlist)
@@ -258,8 +298,7 @@ static void handle_fcn_entry(
   single_step(thread->tid);
   set_byte_at_addr(thread->tid, tp->addr, INT3);
 
-  FCN_INC_REF(thread, fcn);
-  thread->curr_fcn = fcn->id;
+  FCN_ENTER(thread, fcn);
 }
 
 static void handle_fcn_exit(
@@ -288,8 +327,7 @@ static void handle_fcn_exit(
               thread->tid, prev_fcn->name, new_fcn->name,
               tp->type == TP_JMP ? "jmp" : "ret", tp->addr);
 
-    thread->curr_fcn = new_fcn->id;
-    FCN_DEC_REF(thread, prev_fcn);
+    FCN_EXIT(thread, prev_fcn);
 
     /* Encrypt the function we're leaving provided no other thread is in it */
     if (FCN_REFCNT(thread, prev_fcn) == 0) {
@@ -320,7 +358,7 @@ static void handle_fcn_exit(
         set_byte_at_addr(thread->tid, new_fcn->start_addr, INT3);
       }
 
-      FCN_INC_REF(thread, new_fcn);
+      FCN_ENTER(thread, new_fcn);
     }
   } else if (!new_fcn) {
     /* We've left the function we were previously in for a new one that we
@@ -329,8 +367,7 @@ static void handle_fcn_exit(
               thread->tid, prev_fcn->name, regs.ip,
               tp->type == TP_JMP ? "jmp" : "ret", tp->addr);
 
-    thread->curr_fcn = -1;
-    FCN_DEC_REF(thread, prev_fcn);
+    FCN_EXIT(thread, prev_fcn);
 
     /* Encrypt prev_fcn (function we're leaving) if we were the last one
      * executing in it */
@@ -347,7 +384,7 @@ static void handle_fcn_exit(
 
     /* Decrement the refcnt on a recursive return but not an internal jump */
     if (tp->type == TP_RET)
-      FCN_DEC_REF(thread, prev_fcn);
+      FCN_EXIT(thread, prev_fcn);
   }
 }
 
@@ -423,19 +460,58 @@ void destroy_thread(
   DIE_IF(list->head == NULL,
       "(runtime bug) attempting to remove nonexistent thread");
 
-  struct thread **p = &list->head;
-  while ((*p) != thread)
-    p = &(*p)->next;
-
   thread->as->refcnt--;
   if (thread->as->refcnt == 0) {
     ks_free(thread->as->fcn_ref_arr);
     ks_free(thread->as);
+  } else {
+    /* Thread is exiting, go through its backtrace and decrement function
+     * refcounts */
+    struct backtrace *curr_bt = thread->bt;
+    while (curr_bt) {
+      FCN_DEC_REF(thread, curr_bt->fcn);
+      if (FCN_REFCNT(thread, curr_bt->fcn) == 0) {
+        rc4_xor_fcn(thread->tid, curr_bt->fcn);
+        set_byte_at_addr(thread->tid, curr_bt->fcn->start_addr, INT3);
+      }
+      curr_bt = curr_bt->next;
+    }
   }
-  ks_free(thread);
+
+  /* Free backtrace linked list */
+  struct backtrace *curr_bt = thread->bt;
+  while (curr_bt) {
+    struct backtrace *temp = curr_bt->next;
+    ks_free(curr_bt);
+    curr_bt = temp;
+  }
+
+  struct thread **p = &list->head;
+  while ((*p) != thread)
+    p = &(*p)->next;
 
   *p = thread->next;
   list->size--;
+  ks_free(thread);
+}
+
+struct backtrace *copy_bt(
+    struct backtrace *bt)
+{
+  struct backtrace *copy = NULL;
+
+  struct backtrace *src = bt;
+  struct backtrace **dest = &copy;
+  while (src) {
+    *dest = ks_malloc(sizeof(struct backtrace));
+    (*dest)->fcn = src->fcn;
+
+    dest = &(*dest)->next;
+    src = src->next;
+  }
+  *dest = NULL;
+
+  return copy;
 }
 
 struct address_space *new_address_space(
@@ -461,10 +537,6 @@ int maybe_handle_new_thread(
     int wstatus,
     struct thread_list *tlist)
 {
-    /* See PTRACE_SETOPTIONS in ptrace manpage */
-#define PTRACE_EVENT_PRESENT(wstatus, event) \
-  ((wstatus) >> 8 == (SIGTRAP | (event) << 8))
-
   if (!(PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_FORK)  ||
         PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_VFORK) ||
         PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE))) {
@@ -494,9 +566,47 @@ int maybe_handle_new_thread(
 
   if ((PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_VFORK)) ||
       ((PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE)) && clone_vm_present)) {
+    DEBUG_FMT("tid %d: new thread is executing in same address space", tid);
     new_thread->as = orig_thread->as;
   } else { /* fork syscall, or clone without CLONE_VM, new address space */
+    DEBUG_FMT("tid %d: new thread is executing in new address space", tid);
     new_thread->as = new_address_space(orig_thread->as);
+  }
+
+  /* Determine what we consider the backtrace of the new thread to be
+   *
+   * There are two possibilities here, either the thread has done a clone(2)
+   * with a child_stack specified as non-null, or done anything else (clone
+   * with no child stack, fork, vfork).
+   *
+   * In the latter of these cases, the logic here is simple. The thread has the
+   * same stack and thus the same return addresses on it. The backtrace is
+   * therefore identical. Because of this, we just copy the backtrace of the
+   * parent thread.
+   *
+   * The former is a bit trickier. If clone(2) is provided with a child_stack
+   * parameter, it must point to a memory region allocated by the parent thread
+   * beforehand. Theoretically, this could contain anything, meaning we have no
+   * real way of knowing what the backtrace should be. In practice, the clone
+   * syscall as implemented in glibc (when returning in the newly-cloned
+   * thread), will simply call the passed in fn argument and then immediately
+   * exit with its return value. We assume this behaviour here. While this will
+   * likely break if a binary does something funky like creating a
+   * preformulated stack and passing that in as child_stack, we have no way of
+   * handling all such funky cases and assuming the glibc behaviour should
+   * cover 99.99% of cases involving clone(2).
+   */
+  void *child_stack = (void *) regs.si;
+  if (((PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE)) && child_stack != NULL)) {
+    DEBUG_FMT("tid %d: new thread has a new stack, removing backtrace", tid);
+    /* Backtrace initially contains just the function the thread was in
+     * (eg. __clone for glibc) */
+    new_thread->bt = NULL;
+    if (orig_thread->bt)
+      FCN_ENTER(new_thread, orig_thread->bt->fcn);
+  } else {
+    DEBUG_FMT("tid %d: new thread has the same stack, copying backtrace", tid);
+    new_thread->bt = copy_bt(orig_thread->bt);
   }
 
   if (regs.di & CLONE_THREAD) {
@@ -507,9 +617,7 @@ int maybe_handle_new_thread(
   }
 
   new_thread->as->refcnt++;
-  new_thread->curr_fcn = orig_thread->curr_fcn;
   new_thread->has_wait_prio = 0;
-  new_thread->as->fcn_ref_arr[orig_thread->curr_fcn]++;
   add_thread(tlist, new_thread);
 
   /* Both the existing and new thread will be stopped */
@@ -606,6 +714,7 @@ void setup_initial_thread(pid_t tid, struct thread_list *tlist)
         (void *) (PTRACE_O_EXITKILL   |
                   PTRACE_O_TRACECLONE |
                   PTRACE_O_TRACEFORK  |
+                  PTRACE_O_TRACEEXIT  |
                   PTRACE_O_TRACEVFORK));
     DIE_IF_FMT(ret < 0 && ret != -ESRCH,
         "PTRACE_SETOPTIONS failed with error %d", ret);
@@ -619,11 +728,54 @@ void setup_initial_thread(pid_t tid, struct thread_list *tlist)
   thread->tid = tid;
   thread->as = new_address_space(NULL);
   thread->as->refcnt = 1;
+  thread->bt = NULL;
   thread->next = NULL;
   add_thread(tlist, thread);
 
   ret = sys_ptrace(PTRACE_CONT, tid, 0, 0);
   DIE_IF_FMT(ret < 0, "PTRACE_CONT failed with error %d", ret);
+}
+
+static void handle_thread_exit(
+    struct thread *thread,
+    struct thread_list *tlist)
+{
+  /* Undocumented Linux magic right here.
+   *
+   * If the thread group leader of a thread group with > 1 thread exits
+   * while being ptraced, it will hang around as a zombie. Attempting to
+   * sys_wait4 on it will result in infinite hanging. It can only be
+   * successfully wait4'ed on when every other thread in the thread group
+   * has exited and been reaped. This behavior is not documented in the
+   * ptrace manpage.
+   *
+   * Due to this, we don't wait4 on threads if they're the thread group
+   * leader. We just let them hang around as zombies until the runtime
+   * exits and they're automatically reaped thanks to PTRACE_O_EXITKILL.
+   */
+  int needs_wait = thread->tgid != thread->tid;
+  pid_t tid = thread->tid;
+
+  destroy_thread(tlist, thread);
+  /* thread is now freed */
+
+  /* Continue thread and catch exit event */
+  long err = sys_ptrace(PTRACE_CONT, tid, NULL, NULL);
+  DIE_IF_FMT(err < 0, "PTRACE_CONT failed with error %d", err);
+
+  if (needs_wait) {
+    int wstatus;
+    tid = sys_wait4(tid, &wstatus, __WALL);
+    DIE_IF_FMT(tid < 0, "wait4 syscall failed with error %d", tid);
+
+    DIE_IF_FMT(!WIFEXITED(wstatus), "tid %d expected to exit but did not",
+        tid);
+    DEBUG_FMT("tid %d: exited with status %d", tid, WEXITSTATUS(wstatus));
+  } else {
+    DEBUG_FMT(
+        "tid %d: exited but will remain a zombie due to being tg leader",
+        tid);
+  }
 }
 
 void runtime_start(pid_t child_pid)
@@ -678,15 +830,20 @@ void runtime_start(pid_t child_pid)
     if (maybe_handle_new_thread(pid, thread, wstatus, &tlist))
       continue; /* Stopped because of a new thread, not a function entry/exit*/
 
-    if (WIFEXITED(wstatus)) {
-      destroy_thread(&tlist, thread);
-      DEBUG_FMT("tid %d: exited with status %u", pid, WEXITSTATUS(wstatus));
+    /* destroy_thread (which is called by handle_thread_exit) requires that the
+     * thread not yet have exited as it may need to re-encrypt functions in the
+     * thread's address space if there are now no threads executing in them. We
+     * thus we use PTRACE_EVENT_EXIT instead of WIFEXITED here to keep the
+     * thread in a "just about to exit" state that will allow the use of
+     * PTRACE_[PEEK/POKE]TEXT.
+     */
+    if (PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_EXIT)) {
+      handle_thread_exit(thread, &tlist);
 
       if (tlist.size == 0) {
         DEBUG("all threads exited, exiting");
-        sys_exit(WEXITSTATUS(wstatus));
+        sys_exit(0);
       }
-
       continue;
     }
 

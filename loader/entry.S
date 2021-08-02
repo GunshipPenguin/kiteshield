@@ -6,6 +6,14 @@ _start:
   # the kernel and should be set to 0 manually to mark the deepest stack frame.
   xor %ebp, %ebp
 
+#ifdef USE_RUNTIME
+  # Fork, starting the runtime in the parent process and returning in the child
+  call do_fork
+
+  # We've now forked. The runtime is running in our parent and will not return.
+  # here. Only the child will execute the code below.
+#endif
+
   # Load function has the following signature
   # void load(void *entry_stacktop)
   mov %rsp, %rdi # entry_stacktop
@@ -15,11 +23,8 @@ _start:
   push %rax
 
 #ifdef USE_RUNTIME
-  # Fork, starting the runtime in the parent process and returning in the child
-  call do_fork
-
-  # We've now forked. The runtime is running in our parent and will not return.
-  # here. Only the child will execute the code below.
+  # Binary has been mapped into memory, have the parent ptrace the child
+  call child_start_ptrace
 #endif
 
   # The x86-64 SysV ABI specifies that %rdx contains the address of a function
@@ -52,4 +57,3 @@ _start:
 
   pop %rbx
   jmp *%rbx
-

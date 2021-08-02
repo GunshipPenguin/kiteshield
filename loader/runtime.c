@@ -892,7 +892,6 @@ void do_fork()
 {
   DIE_IF(antidebug_proc_check_traced(), TRACED_MSG);
 
-  long ret;
   pid_t pid = sys_fork();
   DIE_IF_FMT(pid < 0, "fork failed with error %d", pid);
 
@@ -903,8 +902,11 @@ void do_fork()
 
   /* Just in case the earlier one in load() was patched out :) */
   antidebug_rlimit_set_zero_core();
+}
 
-  ret = sys_ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+void child_start_ptrace()
+{
+  long ret = sys_ptrace(PTRACE_TRACEME, 0, NULL, NULL);
   DIE_IF_FMT(ret < 0, "child: PTRACE_TRACEME failed with error %d", ret);
 
   /* Pause here so runtime can init itself, runtime will do PTRACE_CONT when

@@ -536,19 +536,12 @@ struct address_space *new_address_space(
     return as;
 }
 
-int maybe_handle_new_thread(
+void handle_new_thread(
     pid_t tid,
     struct thread *orig_thread,
     int wstatus,
     struct thread_list *tlist)
 {
-  if (!(PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_FORK)  ||
-        PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_VFORK) ||
-        PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE))) {
-    /* no new thread, do nothing */
-    return 0;
-  }
-
   pid_t new_tid;
   long ret = sys_ptrace(PTRACE_GETEVENTMSG, tid, 0, &new_tid);
   DIE_IF_FMT(ret < 0, "PTRACE_GETEVENTMSG failed with error %d", ret);
@@ -639,8 +632,6 @@ retry_child_wait:
 
   if (ret == -ESRCH)
     goto retry_child_wait;
-
-  return 1;
 }
 
 /* Fairly waits on all threads in the packed program.
@@ -838,8 +829,13 @@ void runtime_start(pid_t child_pid)
     DIE_IF_FMT(!thread,
         "(runtime bug) tid %d trapped but we don't have a record of it", pid);
 
-    if (maybe_handle_new_thread(pid, thread, wstatus, &tlist))
-      continue; /* Stopped because of a new thread, not a function entry/exit*/
+    if ((PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_FORK)  ||
+         PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_VFORK) ||
+         PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE))) {
+      /* Trap due to new thread */
+      handle_new_thread(pid, thread, wstatus, &tlist);
+      continue;
+    }
 
     /* destroy_thread (which is called by handle_thread_exit) requires that the
      * thread not yet have exited as it may need to re-encrypt functions in the

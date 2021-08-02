@@ -705,9 +705,7 @@ pid_t fair_wait_threads(struct thread_list *tlist, int *wstatus)
 
 void setup_initial_thread(pid_t tid, struct thread_list *tlist)
 {
-  /* Set up state for initial forked child (special case of
-   * maybe_handle_new_thread).
-   */
+  /* Set up initial forked child (special case of handle_new_thread) */
   long ret;
   while (1) {
     /* Spin while we wait for the child do do a ptrace(PTRACE_TRACEME, ...) and

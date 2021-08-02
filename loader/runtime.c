@@ -676,6 +676,12 @@ pid_t fair_wait_threads(struct thread_list *tlist, int *wstatus)
       break;
     curr = curr->next;
   }
+
+  /* If curr == NULL, the thread with wait priority was just destroyed. Just
+     give wait priority to the head of the list. */
+  if (curr == NULL) {
+    curr = tlist->head;
+  }
   curr->has_wait_prio = 0;
 
   pid_t tid;

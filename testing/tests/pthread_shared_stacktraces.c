@@ -12,6 +12,7 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 void fcn_2(long id)
 {
   printf("thread %d is in fcn_2\n", id);
+  fflush(stdout);
 
   pthread_mutex_lock(&mutex);
   curr_thread++;

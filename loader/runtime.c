@@ -47,6 +47,11 @@
 
 struct runtime_info rt_info __attribute__((section(".rt_info")));
 
+struct thread_group {
+  pid_t tgid;
+  int refcnt;
+};
+
 /* Function encryption data needs to be maintained per address space and not
  * per-thread as multiple threads could be executing in the same address space.
  */
@@ -82,11 +87,11 @@ struct backtrace {
  * heap for every thread in existence.
  */
 struct thread {
-  pid_t tgid;
   pid_t tid;
   int has_wait_prio; /* See fair_wait_threads */
   struct backtrace *bt;
   struct address_space *as;
+  struct thread_group *tg;
   struct thread *next;
 };
 
@@ -253,7 +258,7 @@ static void stop_threads_in_same_as(
   struct thread *curr = tlist->head;
   while (curr) {
     if (curr != thread && curr->as == thread->as)
-      sys_tgkill(curr->tgid, curr->tid, SIGSTOP);
+      sys_tgkill(curr->tg->tgid, curr->tid, SIGSTOP);
 
     /* We need to busy loop here waiting for the SIGSTOP to be delivered since
      * sys_tgkill(pid, SIGSTOP) will not immediately stop the process, there is
@@ -465,6 +470,10 @@ void destroy_thread(
   DIE_IF(list->head == NULL,
       "(runtime bug) attempting to remove nonexistent thread");
 
+  thread->tg->refcnt--;
+  if (thread->tg->refcnt == 0)
+    ks_free(thread->tg);
+
   thread->as->refcnt--;
   if (thread->as->refcnt == 0) {
     ks_free(thread->as->fcn_ref_arr);
@@ -536,7 +545,34 @@ struct address_space *new_address_space(
     return as;
 }
 
-void handle_new_thread(
+static void handle_exec(
+    struct thread *thread,
+    struct thread_list *tlist)
+{
+  pid_t tgid = thread->tg->tgid;
+
+  DEBUG_FMT("tid %d: performed an execve, detaching", tgid);
+
+  /* The exec will get rid of every thread in the thread group. Remove all of
+     them from tlist. */
+  struct thread *curr_thread = tlist->head;
+  while (curr_thread) {
+    DEBUG_FMT("%p %p", curr_thread, curr_thread->next);
+    if (curr_thread->tg->tgid == thread->tg->tgid) {
+      destroy_thread(tlist, curr_thread);
+      curr_thread = tlist->head;
+    } else {
+      curr_thread = curr_thread->next;
+    }
+  }
+  /* thread is now freed */
+
+  /* Allow exec'd program to continue */
+  long err = sys_ptrace(PTRACE_DETACH, tgid, NULL, NULL);
+  DIE_IF_FMT(err < 0, "PTRACE_CONT failed with error %d", err);
+}
+
+static void handle_new_thread(
     pid_t tid,
     struct thread *orig_thread,
     int wstatus,
@@ -560,15 +596,25 @@ void handle_new_thread(
   struct user_regs_struct regs;
   ret = sys_ptrace(PTRACE_GETREGS, tid, NULL, &regs);
   DIE_IF_FMT(ret < 0, "PTRACE_GETREGS failed with error %d", ret);
-  int clone_vm_present = regs.di & CLONE_VM;
+  int has_clone_vm = regs.di & CLONE_VM;
 
   if ((PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_VFORK)) ||
-      ((PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE)) && clone_vm_present)) {
+      ((PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE)) && has_clone_vm)) {
     DEBUG_FMT("tid %d: new thread is executing in same address space", tid);
     new_thread->as = orig_thread->as;
   } else { /* fork syscall, or clone without CLONE_VM, new address space */
     DEBUG_FMT("tid %d: new thread is executing in new address space", tid);
     new_thread->as = new_address_space(orig_thread->as);
+  }
+
+  int has_clone_thread = regs.di & CLONE_THREAD;
+  if (PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE) && has_clone_thread) {
+    new_thread->tg = orig_thread->tg;
+    new_thread->tg->refcnt++;
+  } else {
+    new_thread->tg = ks_malloc(sizeof(struct thread_group));
+    new_thread->tg->tgid = new_tid;
+    new_thread->tg->refcnt = 1;
   }
 
   /* Determine what we consider the backtrace of the new thread to be
@@ -605,13 +651,6 @@ void handle_new_thread(
   } else {
     DEBUG_FMT("tid %d: new thread has the same stack, copying backtrace", tid);
     new_thread->bt = copy_bt(orig_thread->bt);
-  }
-
-  if (regs.di & CLONE_THREAD) {
-    /* New thread group, new_thread is thread group leader */
-    new_thread->tgid = tid;
-  } else {
-    new_thread->tgid = orig_thread->tgid;
   }
 
   new_thread->as->refcnt++;
@@ -666,6 +705,9 @@ retry_child_wait:
  */
 pid_t fair_wait_threads(struct thread_list *tlist, int *wstatus)
 {
+  DIE_IF(tlist->head == NULL,
+      "(runtime bug) attempting to wait on an empty thread list");
+
   struct thread *curr = tlist->head;
   while (curr) {
     if (curr->has_wait_prio)
@@ -715,6 +757,7 @@ void setup_initial_thread(pid_t tid, struct thread_list *tlist)
                   PTRACE_O_TRACECLONE |
                   PTRACE_O_TRACEFORK  |
                   PTRACE_O_TRACEEXIT  |
+                  PTRACE_O_TRACEEXEC  |
                   PTRACE_O_TRACEVFORK));
     DIE_IF_FMT(ret < 0 && ret != -ESRCH,
         "PTRACE_SETOPTIONS failed with error %d", ret);
@@ -724,7 +767,9 @@ void setup_initial_thread(pid_t tid, struct thread_list *tlist)
 
   struct thread *thread = ks_malloc(sizeof(struct thread));
   thread->has_wait_prio = 1;
-  thread->tgid = tid; /* Created via fork so it's the thread group leader */
+  thread->tg = ks_malloc(sizeof(struct thread_group));
+  thread->tg->tgid = tid; /* Created via fork so it's the thread group leader */
+  thread->tg->refcnt = 1;
   thread->tid = tid;
   thread->as = new_address_space(NULL);
   thread->as->refcnt = 1;
@@ -750,10 +795,11 @@ static void handle_thread_exit(
    * ptrace manpage.
    *
    * Due to this, we don't wait4 on threads if they're the thread group
-   * leader. We just let them hang around as zombies until the runtime
-   * exits and they're automatically reaped thanks to PTRACE_O_EXITKILL.
+   * leader UNTIL all threads in the thread group have exited.
    */
-  int needs_wait = thread->tgid != thread->tid;
+  int is_last_in_tg = thread->tg->refcnt == 1;
+  int is_tg_leader = thread->tg->tgid == thread->tid;
+  pid_t tgid = thread->tg->tgid;
   pid_t tid = thread->tid;
 
   destroy_thread(tlist, thread);
@@ -763,18 +809,24 @@ static void handle_thread_exit(
   long err = sys_ptrace(PTRACE_CONT, tid, NULL, NULL);
   DIE_IF_FMT(err < 0, "PTRACE_CONT failed with error %d", err);
 
-  if (needs_wait) {
-    int wstatus;
+  int wstatus;
+  if (!is_tg_leader) {
     tid = sys_wait4(tid, &wstatus, __WALL);
     DIE_IF_FMT(tid < 0, "wait4 syscall failed with error %d", tid);
 
     DIE_IF_FMT(!WIFEXITED(wstatus), "tid %d expected to exit but did not",
         tid);
     DEBUG_FMT("tid %d: exited with status %d", tid, WEXITSTATUS(wstatus));
-  } else {
-    DEBUG_FMT(
-        "tid %d: exited but will remain a zombie due to being tg leader",
+  }
+
+  /* Wait on thread group leader when its the last thread */
+  if (is_last_in_tg) {
+    tgid = sys_wait4(tgid, &wstatus, __WALL);
+    DIE_IF_FMT(tid < 0, "wait4 syscall failed with error %d", tid);
+
+    DIE_IF_FMT(!WIFEXITED(wstatus), "tid %d expected to exit but did not",
         tid);
+    DEBUG_FMT("tid %d: exited with status %d", tid, WEXITSTATUS(wstatus));
   }
 }
 
@@ -832,6 +884,12 @@ void runtime_start(pid_t child_pid)
          PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_CLONE))) {
       /* Trap due to new thread */
       handle_new_thread(pid, thread, wstatus, &tlist);
+      continue;
+    }
+
+    if (PTRACE_EVENT_PRESENT(wstatus, PTRACE_EVENT_EXEC)) {
+      /* Trap due to exec */
+      handle_exec(thread, &tlist);
       continue;
     }
 

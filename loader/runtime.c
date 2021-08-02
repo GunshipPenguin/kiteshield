@@ -67,6 +67,11 @@ struct address_space {
   uint16_t *fcn_ref_arr;
 };
 
+/* Structure used to keep track of the current backtrace of each thread. A
+ * linked list of these is maintained in each thread context and on thread
+ * exit, functions that are still in the thread's backtrace have their
+ * reference counts decremented and are re-encrypted as needed.
+ */
 struct backtrace {
   struct function *fcn;
   struct backtrace *next;

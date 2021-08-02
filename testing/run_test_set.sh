@@ -66,6 +66,7 @@ RUN_RT_AND_NORT_TESTS pthread_many_threads 0
 RUN_RT_AND_NORT_TESTS pthread_shared_stacktraces 0
 RUN_RT_AND_NORT_TESTS pthread_exit_deep_in_callstack 0
 RUN_RT_AND_NORT_TESTS pthread_with_fork 0
+RUN_RT_AND_NORT_TESTS pthread_thread_leader_exit 0
 RUN_RT_AND_NORT_TESTS fork_simple 0
 RUN_RT_AND_NORT_TESTS fork_many 0
 RUN_RT_AND_NORT_TESTS fork_chain 0

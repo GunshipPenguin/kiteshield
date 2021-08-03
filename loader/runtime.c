@@ -47,6 +47,7 @@
 
 struct runtime_info rt_info __attribute__((section(".rt_info")));
 
+/* Allocated once per tg to store information common to a thread group. */
 struct thread_group {
   pid_t tgid;
   int refcnt;

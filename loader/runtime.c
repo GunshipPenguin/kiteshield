@@ -64,12 +64,8 @@ struct address_space {
    * indicates the number of threads having it in their stack trace. When this
    * reaches 0, that indicates we can safely encrypt the function as no thread
    * will return to it in the future, expecting it to be decrypted.
-   *
-   * 16 bit integers were chosen to save a bit of space since this array can be
-   * large. This still allows 65535 threads, which ought to be enough for
-   * anybody.
    */
-  uint16_t *fcn_ref_arr;
+  uint64_t *fcn_ref_arr;
 };
 
 /* Structure used to keep track of the current backtrace of each thread. A

@@ -24,8 +24,8 @@ prevalent in Old School Runescape).
 
 Kiteshield requires the [Bitdefender
 disassembler](https://github.com/bitdefender/bddisasm) library to decode
-instructions in the packer. It is included as a submodule at `packer/bddisasm`
-. To build it from a fresh clone, run the following (note you will need to have
+instructions in the packer. It is included as a submodule at `packer/bddisasm`.
+To build it from a fresh clone, run the following (note you will need to have
 CMake installed):
 
 ```
@@ -76,21 +76,21 @@ runtime engine omitted.
 Kiteshield is composed of two separate parts. The packer is a regular C
 application that reads, instruments, and encrypts input binaries. The loader is
 a freestanding C application responsible for dynamic function decryption and
-anti-debugging functionality that is injected into input binaries by the packer.
-It receives initial control from the kernel, maps all appropriate segments of
-the binary into memory (including the dynamic linker if applicable), and hands
-off control to the application. The loader also contains the runtime engine,
-which dynamically decrypts and encrypts functions as they are entered and exited
-at runtime.
+anti-debugging functionality that is injected into input binaries by the
+packer. It receives initial control from the kernel, maps all appropriate
+segments of the binary into memory (including the dynamic linker if
+applicable), and hands off control to the application. The loader also contains
+the runtime engine, which dynamically decrypts and encrypts functions as they
+are entered and exited at runtime.
 
-Since the loader receives initial control from the kernel (ie. before any shared
-libraries would normally be mapped by the dynamic linker). It does not have
-access to glibc and thus all needed functionality provided by glibc is
+Since the loader receives initial control from the kernel (ie. before any
+shared libraries would normally be mapped by the dynamic linker), it does not
+have access to libc and thus all needed functionality provided by libc is
 re-implemented in the loader code.
 
 Packer and loader code can be found in the `packer/` and `loader/` directories
 respectively. Code that is common to both can be found in the `common/`
-directory. A brief overview of the important parts of the codebase is as
+directory. A high-level overview of the important parts of the codebase is as
 follows:
 
 ```
@@ -105,7 +105,7 @@ kiteshield
 ├── LICENSE
 ├── loader                         # Loader code
 │   ├── anti_debug.c               # Anti-debugging functionality
-│   ├── bin_to_header.py           # Script to "headerize" a compiled loader for injecting
+│   ├── bin_to_header.py           # Script to "headerize" a compiled loader
 │   ├── entry.S                    # Loader entry point code
 │   ├── include
 │   │   ├── anti_debug.h
@@ -147,36 +147,36 @@ kiteshield
 ## <a name="architecture"></a> Architecture
 
 Kiteshield wraps input ELF binaries in two (or one, if using the `-n` flag)
-layers of RC4 encryption such that the binary on disk is fairly well obfuscated.
-These layers are stripped off at runtime by the loader.
+layers of RC4 encryption such that the binary on disk is fairly well
+obfuscated. These layers are stripped off at runtime by the loader.
 
 ### Layer 1
 
-The first layer of encryption (referred to in the codebase as the "outer layer")
-consists of a single RC4 pass over the entire input binary. This is designed
-primarily to fight static analysis. Due to the way the key is deobfuscated
-(which is dependent on the loader code) the first layer of encryption also
-effectively checksums the loader code before executing the packed binary, making
-Kiteshield resistant to code patching.
+The first layer of encryption (referred to in the codebase as the "outer
+layer") consists of a single RC4 pass over the entire input binary. This is
+designed primarily to fight static analysis. Due to the way the key is
+deobfuscated (which is dependent on the loader code) the first layer of
+encryption also effectively checksums the loader code before executing the
+packed binary, making Kiteshield resistant to code patching.
 
 ### Layer 2
 
 The second layer of encryption (referred to in the codebase as the "inner
 layer") consists of individual encryption of almost every function in the input
 binary (identified via the symbol table at pack-time). A ptrace-based runtime
-engine is triggered on every function entry and exit via
-replacement of each function's entry instruction and all its return instructions
-with `int3` instructions (which deliver a `SIGTRAP` when executed). Upon
-receiving a trap, the runtime engine looks up the current function and encrypts
-or decrypts it as needed such that only functions within the current call stack
-are decrypted at any point in time.
+engine is triggered on every function entry and exit via replacement of each
+function's entry instruction and all its return instructions with `int3`
+instructions (which deliver a `SIGTRAP` when executed). Upon receiving a trap,
+the runtime engine looks up the current function and encrypts or decrypts it as
+needed such that only functions within the current call stack are decrypted at
+any point in time.
 
 After stripping off layer 1, Kiteshield effectively re-implements the `exec`
-syscall in userspace (See `loader/loader.c`. This technique is commonly referred
-to in literature as a "userspace exec" or "userland exec".) to map the packed
-binary into memory via a series of `mmap`/`mprotect` calls before forking and
-handing control off to the packed binary in the child and the runtime engine in
-the parent (which attaches to the child using ptrace).
+syscall in userspace (See `loader/loader.c`. This technique is commonly
+referred to in literature as a "userspace exec" or "userland exec".) to map the
+packed binary into memory via a series of `mmap`/`mprotect` calls before
+forking and handing control off to the packed binary in the child and the
+runtime engine in the parent (which attaches to the child using ptrace).
 
 In addition to encryption, Kiteshield's loader code also contains a number of
 anti-debugging features designed to make it as difficult as possible to analyze

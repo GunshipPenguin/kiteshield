@@ -58,5 +58,6 @@ output-dirs:
 	mkdir -p out/no_rt
 
 clean:
+	$(MAKE) clean -C test
 	rm -rf out/
 	rm -f $(OBFUSCATED_STRINGS_HEADER)

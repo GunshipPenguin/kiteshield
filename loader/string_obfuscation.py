@@ -9,20 +9,20 @@ import binascii
 import sys
 
 STRINGS = {
-        # loader/include/anti_debug.h
-        'PROC_STATUS_FMT' : '/proc/%d/status',
-        'TRACERPID_PROC_FIELD': 'TracerPid:',
+    # loader/include/anti_debug.h
+    'PROC_STATUS_FMT': '/proc/%d/status',
+    'TRACERPID_PROC_FIELD': 'TracerPid:',
 
-        # loader/runtime.c
-        'PROC_STAT_FMT' : '/proc/%d/stat',
+    # loader/runtime.c
+    'PROC_STAT_FMT': '/proc/%d/stat',
 
-        # loader/anti_debug.c
-        'LD_PRELOAD' : 'LD_PRELOAD',
-        'LD_AUDIT' : 'LD_AUDIT',
-        'LD_DEBUG' : 'LD_DEBUG',
+    # loader/anti_debug.c
+    'LD_PRELOAD': 'LD_PRELOAD',
+    'LD_AUDIT': 'LD_AUDIT',
+    'LD_DEBUG': 'LD_DEBUG',
 
-        # loader/string.c
-        'HEX_DIGITS': '0123456789abcdef'
+    # loader/string.c
+    'HEX_DIGITS': '0123456789abcdef'
 }
 
 # For some reason, gcc likes to optimize out this entire statement expression
@@ -39,14 +39,17 @@ _DEOBF_MACRO = '''
 
 '''
 
+
 def escape_str(s):
     return ''.join('\\x{:02x}'.format(ord(c)) for c in s)
+
 
 def crypt_str(s):
     new = ''
     for i, c in enumerate(s):
         new += chr(ord(c) ^ ((0x83 + i) % 256))
     return new
+
 
 def output_header(f):
     f.write('#ifndef __KITESHIELD_OBFUSCATED_STRINGS_H\n')
@@ -61,6 +64,7 @@ def output_header(f):
 
     f.write('\n')
     f.write('#endif /* __KITESHIELD_OBFUSCATED_STRINGS_H */\n')
+
 
 if __name__ == '__main__':
     output_header(sys.stdout)

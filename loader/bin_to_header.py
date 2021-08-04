@@ -16,14 +16,19 @@ def bin_to_header(bin_file, array_name):
     sys.stdout.write('char %s[%d] = {\n' % (array_name, len(byte_strs)))
 
     for line_num in range(math.ceil(len(byte_strs) / BYTES_PER_LINE)):
-        line_list = byte_strs[BYTES_PER_LINE*line_num:BYTES_PER_LINE*line_num+BYTES_PER_LINE]
-        line_num_comment = '/* %s */' % '{0:#06x}'.format(line_num * BYTES_PER_LINE)
+        start_i = BYTES_PER_LINE * line_num
+        end_i = start_i + BYTES_PER_LINE
+
+        line_list = byte_strs[start_i:end_i]
+        line_num_comment = '/* %s */' % '{0:#06x}'.format(start_i)
+
         sys.stdout.writelines([
             line_num_comment, '  ', ', '.join(line_list), ',\n'
         ])
 
     sys.stdout.write('};\n\n')
     sys.stdout.write('#endif\n')
+
 
 if __name__ == '__main__':
     if len(sys.argv) == 2:
@@ -34,4 +39,3 @@ if __name__ == '__main__':
         print(
             'Syntax: python3 bin_to_header.py <array name> [input file]',
             file=sys.stderr)
-

@@ -6,7 +6,8 @@ that decrypts, maps, and executes the packed binary entirely in userspace. A
 ptrace-based runtime engine ensures that only functions in the current call
 stack are decrypted at any given time and additionally implements a variety of
 anti-debugging techniques in order to make packed binaries as hard to
-reverse-engineer as possible.
+reverse-engineer as possible. Both single and multithreaded binaries are
+supported.
 
 See the [Architecture](#architecture) and [Codebase Layout](#codebase-layout)
 sections below for a bird's-eye view of how Kiteshield works.
@@ -94,45 +95,53 @@ follows:
 
 ```
 kiteshield
-├── common                               # Code common to packer/loader
+├── common                         # Code common to packer/loader
 │   ├── include
 │   │   ├── defs.h
 │   │   ├── obfuscation.h
 │   │   └── rc4.h
-│   ├── obfuscation.c                    # Obfuscation utilities
-│   └── rc4.c                            # RC4 stream cipher implementation
+│   ├── obfuscation.c              # Obfuscation utilities
+│   └── rc4.c                      # RC4 stream cipher implementation
 ├── LICENSE
-├── loader                               # Loader code
-│   ├── anti_debug.c                     # Anti debugging functionality
-│   ├── bin_to_header.py                 # Script to "headerize" a compiled loader for injecting
-│   ├── debug.c                          # Printing / debugging functionality enabled in debug mode
-│   ├── entry.S                          # Initial loader entry code
+├── loader                         # Loader code
+│   ├── anti_debug.c               # Anti-debugging functionality
+│   ├── bin_to_header.py           # Script to "headerize" a compiled loader for injecting
+│   ├── entry.S                    # Loader entry point code
 │   ├── include
 │   │   ├── anti_debug.h
 │   │   ├── debug.h
 │   │   ├── elf_auxv.h
-│   │   ├── obfuscated_strings.h         # Generated file produced by string_obfuscation.py
+│   │   ├── errno.h
+│   │   ├── malloc.h
+│   │   ├── obfuscated_strings.h   # Generated file produced by string_obfuscation.py
 │   │   ├── signal.h
 │   │   ├── string.h
 │   │   ├── syscalls.h
 │   │   └── types.h
-│   ├── link.lds                         # Linker script for building loader
-│   ├── loader.c                         # Binary loading / mapping code (userspace exec)
+│   ├── link.lds                   # Custom linker script for building loader
+│   ├── loader.c                   # Binary loading/mapping code (userspace exec)
 │   ├── Makefile
-│   ├── runtime.c                        # Runtime engine code
-│   ├── string.c                         # String utilities (eg. strncat)
-│   ├── string_obfuscation.py            # String obfuscation helper script
-│   └── syscalls.c                       # System call implementations in inline assembly
+│   ├── malloc.c                   # Freestanding malloc/free implementation
+│   ├── runtime.c                  # Main body of runtime engine code
+│   ├── string.c                   # String processing utilities (eg. strncat)
+│   ├── string_obfuscation.py      # String obfuscation helper script
+│   ├── syscalls.c                 # System call implementations in inline assembly
+│   └── test                       # Loader unit tests
+│       ├── attounit.h
+│       ├── Makefile
+│       ├── test_main.c
+│       ├── test_malloc.c
+│       └── test_rc4.c
 ├── Makefile
-├── packer                               # Packer code
-│   ├── bddisasm                         # Bitdefender x86-64 decoding library (submodule)
-│   ├── elfutils.c                       # ELF binary reading/writing wrappers
+├── packer                         # Packer code
+│   ├── bddisasm                   # Bitdefender x86-64 disassembler library (submodule)
+│   ├── elfutils.c                 # ELF binary reading/writing utilities
 │   ├── include
 │   │   └── elfutils.h
-│   ├── kiteshield.c                     # Main packer code
+│   ├── kiteshield.c               # Main body of packer code
 │   └── Makefile
 ├── README.md
-└── testing                              # Integration tests (see testing/README.md)
+└── testing                        # Integration tests (see testing/README.md)
 ```
 
 ## <a name="architecture"></a> Architecture
@@ -194,8 +203,24 @@ clarity) to provide a concrete example of Kiteshield in action:
 
 ```
 $ ./packed.ks
-# Stripping layer 1 encryption
-[kiteshield] RC4 decrypting binary with key f31de2fd90ed703bac45991e6042da81
+
+# Runtime startup
+[kiteshield] starting ptrace runtime
+[kiteshield] number of trap points: 5
+[kiteshield] number of encrypted functions: 3
+
+# List of points in memory that have been instrumented with an int3 instruction
+[kiteshield] list of trap points:
+[kiteshield] 8000011ac value: c3, type: ret, function: __libc_csu_init (#0)
+[kiteshield] 800001150 value: 41, type: ent, function: __libc_csu_init (#0)
+[kiteshield] 800001050 value: 31, type: ent, function: _start (#1)
+[kiteshield] 80000114b value: c3, type: ret, function: main (#2)
+[kiteshield] 800001135 value: 55, type: ent, function: main (#2)
+
+# Runtime has started and is waiting on the packed app, begin mapping binary
+
+# Stripping layer one encryption
+[kiteshield] RC4 decrypting binary with key 85e19ad41fb8cc13e87e3cd1589a45fb
 [kiteshield] decrypted 12336 bytes
 
 # Mapping segments from packed binary program header table
@@ -215,7 +240,7 @@ $ ./packed.ks
 [kiteshield] binary base address is 800000000
 
 # Modifying ELF auxiliary vector as needed for program execution
-[kiteshield] taking 7fff734f8730 as auxv start
+[kiteshield] taking 7ffff2997c60 as auxv start
 [kiteshield] replaced auxv entry 9 with value 34359742544 (0x800001050)
 [kiteshield] replaced auxv entry 3 with value 34359738432 (0x800000040)
 [kiteshield] replaced auxv entry 7 with value 47244640256 (0xb00000000)
@@ -223,32 +248,24 @@ $ ./packed.ks
 [kiteshield] finished mapping binary into memory
 [kiteshield] control will be passed to packed app at b00001090
 
-# Mapping done, forking, starting runtime in parent, and handing control to ld.so in child
-[kiteshield] starting ptrace runtime
-[kiteshield] number of trap points: 5
-[kiteshield] number of encrypted functions: 3
+# Mapping done
 
-# List of points in memory that have been instrumented with an int3 instruction
-[kiteshield] list of trap points:
-[kiteshield] 8000011ac value: c3, type: ret function: __libc_csu_init
-[kiteshield] 800001150 value: 41, type: ent function: __libc_csu_init
-[kiteshield] 800001050 value: 31, type: ent function: _start
-[kiteshield] 80000114b value: c3, type: ret function: main
-[kiteshield] 800001135 value: 55, type: ent function: main
-[kiteshield] child: PTRACE_TRACEME was successful
-[kiteshield] child: handing control to packed binary
+# Runtime attaches to the packed application with ptrace
+[kiteshield] child is traced, handing control to packed binary
 
 # Program is executing, functions are logged on entry/exit
-[kiteshield] entering function _start, decrypting with key de88a921e09d10d04d31889465e10ff6
-[kiteshield] entering function __libc_csu_init, decrypting with key 9df70403e272381c16abd77c22eee9f3
-[kiteshield] leaving function __libc_csu_init via ret at 8000011ac, not decrypting new function at 7f2a0bce502a (no record)
-[kiteshield] entering function main, decrypting with key 856eb81e873f66bf1ac64e2a07791777
-[kiteshield] leaving function main via ret at 80000114b, not decrypting new function at 7f2a0bce509b (no record)
+[kiteshield] tid 13508: entering encrypted function _start decrypting with key 74c974f9d097e5a8c60049c3842c6110
+[kiteshield] tid 13508: entering encrypted function __libc_csu_init decrypting with key 9124511baa87daa76c09b2426355dfca
+[kiteshield] tid 13508: leaving function __libc_csu_init for address 7fa9a821d02a (no function record) via ret at 8000011ac
+[kiteshield] tid 13508: entering encrypted function main decrypting with key 2f1c20e77ff3617b0b89a579669aba48
 
 # Actual program output
 Hello World!
 
-[kiteshield] child exited with status 0
+# Packed application returns from main() and exits
+[kiteshield] tid 13508: leaving function main for address 7fa9a821d09b (no function record) via ret at 80000114b
+[kiteshield] tid 13508: exited with status 0
+[kiteshield] all threads exited, exiting
 ```
 
 ## Testing
@@ -258,14 +275,10 @@ across several different platforms. See `testing/README.md` for details.
 
 ## Limitations
 
-- Kiteshield's runtime currently does not support multithreaded programs.
-  Programs packed without the `-n` flag (which omits the runtime) must stick to
-  a single thread of execution ("threads of execution" being new
-  processes/threads created with `fork`/`vfork`/`clone`).
-- Kiteshield was written with obfuscation in mind, not speed. Trapping into the
-  Kiteshield runtime on every function entrance and exit is very expensive.
-  Programs packed with layer 2 encryption should expect a serious performance
-  hit.
+Kiteshield was written with obfuscation in mind, not speed. Trapping into the
+Kiteshield runtime on every function entrance and exit is very expensive.
+Programs packed with layer 2 encryption should expect a serious performance
+hit.
 
 ## License
 
